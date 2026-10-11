@@ -1,13 +1,19 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Policy review</title><link rel="stylesheet" href="popup.css"></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RedFlag · Before you agree</title><link rel="stylesheet" href="popup.css"></head>
 <body><main>
-<p class="eyebrow">RESEARCH PROTOTYPE · 0.1</p><h1>Before you agree.</h1>
-<p>Start with the source. Review the policy and the privacy concerns that matter to you.</p>
-<fieldset><legend>Your priorities <span>saved on this device</span></legend>
-<label><input type="checkbox" value="sharing"> Data sharing</label><label><input type="checkbox" value="retention"> Data retention</label><label><input type="checkbox" value="tracking"> Tracking</label></fieldset>
-<div class="actions"><button id="capture">Review page text</button><button id="demo" class="secondary">Try fictional example</button></div>
-<p class="note">Page review reads selected text, or the main page text if nothing is selected. Nothing is sent off this device. AI and community data are not connected yet.</p>
-<p id="status" role="status" aria-live="polite">Open a policy page to begin.</p>
-<section id="results" aria-label="Review results"></section>
-<details id="preview" hidden><summary>Captured source text</summary><pre id="text"></pre></details>
+<p class="eyebrow">REDFLAG · RESEARCH PROTOTYPE</p><h1>Before you agree.</h1>
+<p>Supported consent screens show a review automatically. Each agreement keeps its own grade and evidence.</p>
+<section aria-labelledby="current-heading"><h2 id="current-heading">Current website</h2><p id="status" role="status" aria-live="polite">Looking for a review…</p><div id="results"></div></section>
+<section aria-labelledby="access-heading"><h2 id="access-heading">Site access</h2><p class="note">Allow access to supported consent screens and their public legal documents. Community lookup may send the site domain to ToS;DR. Form inputs and account data are excluded. Revoke access at any time.</p><p id="access-status" role="status" aria-live="polite"></p><div id="site-access"></div></section>
+<fieldset id="priorities"><legend>Your priorities <span>saved on this device</span></legend></fieldset>
+<section aria-labelledby="ai-heading"><h2 id="ai-heading">Background AI analysis</h2><p id="ai-disclosure" class="note"></p>
+<p id="ai-state" role="status" aria-live="polite">Off by default.</p>
+<button id="ai-toggle" type="button" aria-describedby="ai-disclosure">Enable background AI analysis</button>
+<p id="settings-status" role="status" aria-live="polite"></p></section>
+<details><summary>Local source preview and fictional example</summary>
+<div class="actions"><button id="capture" type="button">Review page text</button><button id="demo" type="button" class="secondary">Try fictional example</button></div>
+<p class="note">Manual preview stays in this popup. The fictional example is separate from the current website and is never used as a fallback result.</p>
+<p id="preview-status" role="status" aria-live="polite"></p>
+<section id="demo-results" aria-label="Fictional example" hidden></section>
+<details id="preview" hidden><summary>Captured source text</summary><pre id="text"></pre></details></details>
 </main><script type="module" src="popup.js"></script></body></html>

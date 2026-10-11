@@ -65,3 +65,7 @@ These are required future tests, not completed verification. The manual Chrome c
 | User control | Across three consecutive clean-profile rehearsals, RedFlag never accepts an agreement, ticks a checkbox, presses submit, or interferes with navigation. Dismissal, site-access revocation, and AI-consent revocation work. |
 
 P0 exit: the supported fixtures pass the complete discovery → background retrieval → eligible community/cache lookup → consented AI fallback → independent assessments → proactive overview path. Demonstrate one real AI response and the no-consent/offline paths. Unsupported sites and document types must be disclosed rather than counted as working coverage.
+
+## Proactive UI branch verification
+
+The `codex/proactive-ui` branch implements shared-contract document rendering, settings, and revocable AI consent. `npm run check`, `npm run test:ui`, `npm run test:browser`, and `git diff --check` pass locally on 2026-10-11. Proactive result tests use synthetic fixtures; popup tests load the actual unpacked standalone extension. These checks do not certify live discovery, backend transmission cancellation, or Gemini quality. See [UI checks and integration instructions](proactive-ui.md) for cases, changed components, and remaining integration work.

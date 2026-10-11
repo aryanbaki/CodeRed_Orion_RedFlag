@@ -7,7 +7,8 @@ A Chrome extension that combines community-reviewed insights and Google Gemini t
 ## What runs today
 
 - Manifest V3 popup with user-triggered policy text capture.
-- Local privacy priorities: sharing, retention, tracking.
+- Local priorities for privacy, renewal, cancellation, arbitration and content rights.
+- Proactive multi-document UI and explicit, revocable background-AI consent settings; automatic mounting still requires discovery/background integration.
 - Explicitly fictional example demonstrating evidence and prioritization.
 - Original server-only Gemini adapter with structured output and exact-quote validation, tested with simulated responses.
 - Type checking, focused unit tests, build tooling, and GitHub Actions.
@@ -29,9 +30,9 @@ npm run check
 4. Open a policy page and open the extension popup.
 5. Choose **Review page text**, or **Try fictional example**.
 
-Selected text takes precedence. Otherwise the prototype reads the first `main` or `article`, falling back to the page body. This is a basic extraction experiment: compare the preview with the policy, especially for collapsed sections or tables. Documents above 60,000 characters are rejected, never silently analyzed as complete. Text lives only in the open popup; closing it discards the text. Only priorities are saved in local extension storage.
+Selected text takes precedence. Otherwise the prototype reads the first `main` or `article`, falling back to the page body. This is a basic extraction experiment: compare the preview with the policy, especially for collapsed sections or tables. Documents above 60,000 characters are rejected, never silently analyzed as complete. Text lives only in the open popup; closing it discards the text. Priorities, review enablement and background-AI consent are saved in local extension storage. AI consent defaults off. The popup itself never transmits the manual preview.
 
-Run the isolated Chromium browser checks with `npx playwright install chromium` followed by `npm run test:browser`. They use a temporary browser profile and do not modify your everyday Chrome profile.
+Run the isolated Chromium browser checks with `npx playwright install chromium` followed by `npm run test:browser`. Run `npm run test:ui` for synthetic multi-document warning fixtures (not live AI or discovery). Browser checks use a temporary browser profile and do not modify your everyday Chrome profile.
 
 ## Research and implementation
 
@@ -39,6 +40,7 @@ Run the isolated Chromium browser checks with `npx playwright install chromium` 
 - [Architecture and data boundaries](docs/architecture.md)
 - [Ordered implementation plan and acceptance criteria](docs/implementation-plan.md)
 - [Verification record and browser test procedure](docs/verification.md)
+- [Proactive UI checks and integration instructions](docs/proactive-ui.md)
 
 Run `npm run research:probe` for read-only API availability checks. This sends fixed example requests to ToS;DR and PrivacySpy; it does not send browsing activity or save policy content.
 

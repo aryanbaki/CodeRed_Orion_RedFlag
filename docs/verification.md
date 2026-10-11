@@ -73,3 +73,15 @@ The `codex/proactive-ui` branch implements shared-contract document rendering, s
 ## Combined discovery/UI integration verification
 
 Integrated both worker implementations on main on 2026-10-11. Type checks, 20 unit cases, the discovery browser suite, UI fixture suite, and unpacked-popup suite passed. The discovery suite mounts the actual overview automatically and checks dynamic links, per-document failures, revocation, unchanged consent controls, navigation generations, and worker suspension/recovery. Retrieval and AI transport in this suite are controlled responses, not live providers. Removed the standalone no-op UI bridge so the main build requires the real overview. An integration correction preserves the too-large reason for oversized extracted text. Backend/live-provider and complete HTML grading gates remain open.
+
+## Gemini backend branch verification — 2026-10-11
+
+Work starts from `origin/main` `f83562e` in a separate `codex/gemini-analysis` worktree, with the integration-owned contract commit `0e45ede` applied. No applicable AGENTS.md was found. See [backend setup, API, rubric and integration instructions](gemini-backend.md).
+
+- `npm ci`: installed successfully, audit reported zero known vulnerabilities at this run.
+- `npm run check`: strict TypeScript, 20 test groups (15 new backend groups plus 5 legacy groups), extension build passed. All Google provider responses were simulated; no credential was requested or used, and no live Google analysis was performed.
+- New simulated coverage: independent Terms/Privacy/Additional results, exact offsets and identity/version metadata, rubric/deduplication, fabricated/altered/cross-document quotations, malformed schema/JSON, contradictory/missing category coverage, empty/protective-only results, partial/unknown extraction, unknown document kind, untrusted instruction placement, missing configuration, stalled fetch/body timeout, quota errors, bounded 503 retry, refusals/truncation and oversized provider output.
+- Real local HTTP tests with injected analysis: canonical response/error contracts, origin/authentication, preflight, input/hash/schema rejection, JSON body and chunked-stream limits, minute quota, concurrency cap, and Unrated provider failure. No public server was exposed.
+- Git exclusions, extension bundle inspection and missing-configuration startup were checked locally. `npm run test:browser` passed for the existing popup/demo/priorities/storage/restricted-page behavior; this is not the P0 background flow.
+
+Not verified: live Gemini model availability, structured output acceptance for the selected model, interpretation accuracy, missed clauses/recall, injection resistance of a live model, cost, latency or the complete zero-click worker/UI flow. Exact quote validation proves text presence, not meaning. No policy dates are inferred; original source/retrieval dates remain in worker freshness state.

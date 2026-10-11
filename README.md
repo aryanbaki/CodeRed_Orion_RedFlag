@@ -60,3 +60,7 @@ Run `npm run research:probe` for read-only API availability checks. This sends f
 ## Attribution and licensing
 
 Research references: [ToS;DR](https://github.com/tosdr/browser-extensions), [PrivacySpy](https://github.com/Politiwatch/privacyspy), [Checkmate](https://github.com/nyxb1t/checkmate), [Open Terms Archive](https://github.com/OpenTermsArchive/engine), and [Mozilla Readability](https://github.com/mozilla/readability). No source code, ratings datasets, or artwork from these projects has been copied into this framework. Dependencies retain their own licenses. No project license has been selected; public visibility alone is not a reuse license.
+
+## Local Gemini backend
+
+The server-only P0 demo endpoint is `POST /api/analyze`. Setup, canonical contracts, consent integration, exact-evidence validation, the explicit grading rubric and simulated-verification limits are documented in [docs/gemini-backend.md](docs/gemini-backend.md). Fill an ignored local `.env` from the blank `.env.example`, then run `npm run start:server`. Keep Google credentials on the server; the extension receives only a separate local demo access token.

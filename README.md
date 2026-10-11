@@ -6,7 +6,7 @@ A Chrome extension that combines community-reviewed insights and Google Gemini t
 
 ## What runs today
 
-- Manifest V3 automatic legal-link discovery and public-document retrieval on enabled signup, checkout, onboarding, and consent screens.
+- Manifest V3 automatic legal-link discovery on permitted websites, including footer policies and dynamic consent screens.
 - Popup with optional manual source preview.
 - Local priorities for privacy, renewal, cancellation, arbitration and content rights.
 - Automatically mounted multi-document warnings and explicit, revocable background-AI consent settings.
@@ -28,8 +28,8 @@ npm run check
 1. Open `chrome://extensions` in Chrome.
 2. Enable Developer mode and choose **Load unpacked**.
 3. Select `dist/extension` from this checkout.
-4. Open a supported signup/checkout/onboarding/consent page and open the extension popup once to grant scoped site access.
-5. Reload the site. Legal links are discovered and warnings appear automatically; grant document-origin access in settings if needed.
+4. Open an HTTP/HTTPS website and open RedFlag. The popup scans the current tab; Settings offers scoped site/document access or optional automatic discovery on all sites.
+5. Grants apply immediately. New permitted pages are scanned automatically; floating warnings appear on consent screens. Grant cross-origin document access when needed.
 6. Background AI requires explicit opt-in and backend configuration; see the integration instructions. Manual preview and the fictional example remain available separately.
 
 Selected text takes precedence. Otherwise the prototype reads the first `main` or `article`, falling back to the page body. This is a basic extraction experiment: compare the preview with the policy, especially for collapsed sections or tables. Documents above 60,000 characters are rejected, never silently analyzed as complete. Text lives only in the open popup; closing it discards the text. Priorities, review enablement and background-AI consent are saved in local extension storage. AI consent defaults off. The popup itself never transmits the manual preview.

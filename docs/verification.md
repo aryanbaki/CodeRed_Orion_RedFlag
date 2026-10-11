@@ -89,3 +89,7 @@ Not verified: live Gemini model availability, structured output acceptance for t
 ### Follow-up transport verification
 
 `npm run test:backend-browser` passed: a real unpacked Chromium MV3 service worker sent the exact `chrome-extension://<id>` Origin to the real local `POST /api/analyze` server, received the canonical hash/identity/grade and four exact findings with bearer authorization, and received 401 without the token. The test uses fictional Terms and injected provider output; no Google API call occurs. Temporary extension/profile files are removed. This resolves the extension-Origin transport concern, not the full background-worker consent/discovery/retrieval flow. Strict TypeScript checks also include this fixture.
+
+### Configuration follow-up — 2026-10-11
+
+Added explicit Gemini free/paid/default profiles while retaining legacy `GEMINI_API_KEY` deployments. Blank OpenAI, Claude and custom-provider slots are reserved for future adapters; only Gemini is implemented. `npm run check` passed with 22 test groups, including explicit key/model selection, no implicit paid-key fallback, unsupported-provider rejection and exclusion of inactive credentials from active configuration. An ignored owner-only `.env` was created with blank provider keys and local demo defaults and opened in the side editor for user entry. No keys were copied into chat, committed, or used for live requests.

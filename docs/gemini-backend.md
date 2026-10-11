@@ -6,11 +6,23 @@ This branch extends the existing server-only `analyzeWithGemini` library entry p
 
 1. Use Node 22.6+ and `npm ci` in this worktree.
 2. Copy `.env.example` to `.env` and fill it locally. Never paste the Gemini key into chat, settings, a request body, or extension source.
-3. Set `GEMINI_API_KEY`, `GEMINI_MODEL` (an exact enabled model ID supporting structured generateContent), `REDFLAG_DEMO_TOKEN` (32–128 base64url characters), and `REDFLAG_ALLOWED_ORIGIN` (the exact `chrome-extension://` development extension ID). `PORT` defaults to 8787. No model is silently selected or substituted.
+3. Set the selected Gemini profile key (see below), `GEMINI_MODEL` (an exact enabled model ID supporting structured generateContent), `REDFLAG_DEMO_TOKEN` (32–128 base64url characters), and `REDFLAG_ALLOWED_ORIGIN` (the exact `chrome-extension://` development extension ID). `PORT` defaults to 8787. No model is silently selected or substituted.
 4. Generate a local demo token with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`. This is an access credential for this local server, separate from the Google key. Configure the token in trusted extension settings/storage, never compile it into extension code.
 5. Run `npm run start:server`. The server listens only on `127.0.0.1`. Startup fails without valid configuration. No policy text, request bodies, credentials, or upstream error bodies are logged. Startup/listen errors have fixed messages.
 
 Git already ignores `.env`, `.env.*`, build outputs and logs; the explicit `.env.example` exception contains names and blank values only. Never commit populated env files. The extension build imports no provider/server modules. The server makes no source-URL fetches and sends only the exact legal text plus fixed analysis instructions/schema to Google, with its key in `x-goog-api-key`.
+
+## Free/paid keys and future providers
+
+Open the ignored `.env` in the Codex side editor. Paste the free-project key immediately after `GEMINI_FREE_API_KEY=` and the paid-project key immediately after `GEMINI_PAID_API_KEY=`. Keep `AI_PROVIDER=gemini` and `GEMINI_PROFILE=free` to start; change the profile to `paid` and restart the server to deliberately use the paid-project key. The profile name is a local label, not verification of Google billing status. Check the project's Billing Tier in AI Studio; two keys on the same project do not create two independent tiers. Existing keys can be reused rather than generating new ones.
+
+`GEMINI_FREE_MODEL` and `GEMINI_PAID_MODEL` optionally override `GEMINI_MODEL` for their respective profile. A missing selected key fails configuration; no free-to-paid fallback occurs on quota or configuration errors. Legacy deployments with `GEMINI_API_KEY` continue to work when `GEMINI_PROFILE` is unset or explicitly `default`. Update the trusted worker's model/cache configuration if the selected profile uses a different model. Profile selection does not alter document/result contracts or bypass consent.
+
+The local setup uses `gemini-3.5-flash-lite` as an editable starting model; Google lists a free tier on its [pricing page](https://ai.google.dev/gemini-api/docs/pricing). Account-specific availability and live quality remain unverified. Google associates keys with [projects](https://ai.google.dev/gemini-api/docs/api-key); free/paid service depends on [billing configuration](https://ai.google.dev/gemini-api/docs/billing), not merely a consumer subscription.
+
+Future credential slots are `OPENAI_API_KEY`/`OPENAI_MODEL`, `ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL` for Claude, and `CUSTOM_API_KEY`/`CUSTOM_API_BASE_URL`/`CUSTOM_API_MODEL`. These are reserved configuration fields only: adding keys does not implement those providers. `src/server/provider-config.ts` is the server-side selection boundary; future adapters must reuse the same document validation, evidence verification, rubric, consent and quota boundaries. Gemini is the only active adapter; setting `AI_PROVIDER` to any other value fails explicitly. OpenAI's [official quickstart](https://developers.openai.com/api/docs/quickstart) uses `OPENAI_API_KEY`. No inactive credentials are loaded into the active transport config or transmitted.
+
+`.env` is kept outside Git and created with owner-only permissions. The local demo token and extension origin are prefilled for this worktree's `dist/extension`; when loading an integrated extension from another directory, update `REDFLAG_ALLOWED_ORIGIN` to its actual ID. Provider keys never belong in browser storage or extension settings. Paste keys into the local editor, save the file, and restart with `npm run start:server` from this worktree.
 
 ## Wire integration
 

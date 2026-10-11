@@ -1,3 +1,4 @@
+import {MAX_POLICY_CHARACTERS} from '../core/policy-text.ts';
 import {createHash} from 'node:crypto';
 import {isIP} from 'node:net';
 import {CONTRACT_VERSION, type AnalyzeRequest} from '../core/contracts.ts';
@@ -34,10 +35,10 @@ export function validateRequest(value: unknown): AnalyzeRequest {
   const r = object(value); keys(r, ['schemaVersion', 'document']);
   if (r.schemaVersion !== CONTRACT_VERSION) throw new InputError('Unsupported contract.');
   const d = object(r.document); keys(d, ['id', 'kind', 'url', 'text', 'contentHash', 'retrievedAt', 'coverage', 'documentUpdatedAt']);
-  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(string(d.id, 128)) || typeof d.kind !== 'string' || !['terms', 'privacy', 'additional', 'unknown'].includes(d.kind) ||
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(string(d.id, 128)) || typeof d.kind !== 'string' || !['terms', 'privacy', 'cookies', 'additional', 'unknown'].includes(d.kind) ||
       typeof d.coverage !== 'string' || !['complete', 'partial', 'unknown'].includes(d.coverage)) throw new InputError('Unsupported legal document.');
   publicUrl(d.url); timestamp(d.retrievedAt);
-  const text = string(d.text, 60000, 12);
+  const text = string(d.text, MAX_POLICY_CHARACTERS, 12);
   if (typeof d.contentHash !== 'string' || !/^[a-f0-9]{64}$/.test(d.contentHash) || createHash('sha256').update(text, 'utf8').digest('hex') !== d.contentHash) throw new InputError('Document hash mismatch.');
   if (d.documentUpdatedAt !== undefined) timestamp(d.documentUpdatedAt);
   return r as unknown as AnalyzeRequest;

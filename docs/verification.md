@@ -1,5 +1,7 @@
 # Verification record
 
+**Current delivery: [RedFlag 0.3.1 verification](site-review-0.3.1.md).** Older entries below record prior stages and may describe superseded layouts or integration gaps.
+
 Date: 2026-10-11. Environment: Node 24.21.0, macOS, isolated Playwright Chromium 156. Dependency install reported zero known vulnerabilities at the time of installation.
 
 ## Completed
@@ -106,3 +108,18 @@ Combined analysis/backend, popup, and My Sites worker handoffs in `codex/integra
 A combined browser test exposed test-only unlocked tombstone writes racing dashboard history normalization. The test now uses the same history lock as the application and waits for debounced empty-page discovery. Product code was unchanged for this correction. Popup route, deletion, and late-navigation assertions remain intact.
 
 The developer ZIP includes built extension files, matching server source, blank configuration example and installation instructions. It excludes actual `.env`, credentials, dependencies and browser profiles. Community ingestion is still unpopulated, HTML coverage remains conservative, and Monoglyphic remains an unfinished typography requirement. Earlier entries above are historical stage records; current live verification and limitations are in the worker handoffs.
+
+
+## Simple popup and model backups — October 11, 2026
+
+The popup now shows a single overall S–E/? grade, with Privacy, Terms, and Cookies behind one dropdown. Setup is in onboarding; site access is declared at installation, automatic discovery verifies common addresses, and ToS;DR lookup includes an attributed 42-service snapshot. My Sites prioritizes frequently checked sites. Static legal extraction has dedicated Chromium checks for complete text, hidden sections, cookies, ambiguous layouts, and login rejection.
+
+Validation: 56 unit tests, TypeScript/build, unpacked popup checks, and real extension-to-local-HTTP transport checks pass. The latter transport fixture uses simulated provider output. Backup tests cover failure routing, quotas, 404s, authentication rejection, unsupported evidence, deadline reservation, actual model provenance, and cache allowlists.
+
+Saved credentials were found in the Gemini analysis worktree and copied without printing into this checkout's ignored, owner-only .env. The selected profile remains free. Model configuration is gemini-3.5-flash with gemini-3.1-flash-lite and gemini-2.5-flash-lite backups. No paid credential was used.
+
+Live extension/background/server verification used a controlled signup screen pointing to the actual public GitHub Terms and Privacy Markdown documents. Privacy returned two validated findings and insufficient-evidence. The initial Terms request failed at the provider. A separate live retry returned HTTP 200 and three exact-quote findings, also insufficient-evidence. These are successful live findings, not complete grades or an evaluation of interpretation accuracy; the toolbar correctly showed ?. Form consent remained untouched. Google documents automatic 3.5-to-3.6 routing for the requested primary model name.
+
+A minimal live structured-output request to 3.1 Flash-Lite succeeded. The same check on 2.5 Flash-Lite returned model unavailable for this key. Automatic failover itself was tested with controlled failures; no model is retried merely to replace a valid unrated result with a more favorable grade. The scripts do not configure the user's everyday Chrome profile or deploy a public backend.
+
+Current update: 58 unit tests, typecheck/build, Chromium legal extraction and popup state tests pass. Whole long cookie input reaches analysis through its final clause; policy word counts are shown without persisting full input text. The manual passage-only reader retains its separate 60,000-character selection limit. Live provider checks from the earlier update are not newly rerun by these fixture tests.

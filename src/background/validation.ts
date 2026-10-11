@@ -28,7 +28,7 @@ export function validateDiscovery(raw: unknown, senderUrl: string): {pageUrl:str
   const documents = value.documents.map((item: unknown) => {
     if (!item || typeof item !== 'object') throw new Error('Invalid document');
     const doc = item as DiscoveredDocument;
-    if (typeof doc.id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(doc.id) || !['terms','privacy','additional','unknown'].includes(doc.kind) ||
+    if (typeof doc.id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(doc.id) || !['terms','privacy','cookies','additional','unknown'].includes(doc.kind) ||
       typeof doc.url !== 'string' || publicDocumentUrl(doc.url) !== doc.url || typeof doc.label !== 'string' || doc.label.length > 100 || !Number.isFinite(Date.parse(doc.discoveredAt)) || seen.has(doc.id)) throw new Error('Invalid document');
     seen.add(doc.id);
     return {id:doc.id,url:doc.url,kind:doc.kind,label:doc.label,discoveredAt:doc.discoveredAt};
@@ -39,14 +39,16 @@ export function validateAssessment(raw: unknown, doc: AnalysisDocument, versions
   if (!raw || typeof raw !== 'object') throw new Error('invalid-response');
   const a = raw as DocumentAssessment;
   if (a.documentId !== doc.id || a.documentUrl !== doc.url || a.kind !== doc.kind || a.contentHash !== doc.contentHash ||
-      a.provider !== 'gemini' || a.model !== versions.model || a.promptVersion !== versions.promptVersion || a.rubricVersion !== versions.rubricVersion ||
-      !['A','B','C','D','E','F','Unrated'].includes(a.grade) || !['complete','partial','unknown'].includes(a.coverage) || a.coverage !== doc.coverage ||
+      a.provider !== 'gemini' || ![versions.model,...(versions.fallbackModels??[])].includes(a.model??'') || a.promptVersion !== versions.promptVersion || a.rubricVersion !== versions.rubricVersion ||
+      !['S','A','B','C','D','E','Unrated'].includes(a.grade) || !['complete','partial','unknown'].includes(a.coverage) || a.coverage !== doc.coverage ||
       (a.grade !== 'Unrated' && a.coverage !== 'complete') || (a.grade === 'Unrated' && !a.reason) ||
       !Number.isFinite(Date.parse(a.analyzedAt)) || typeof a.summary !== 'string' || a.summary.length > 4000 || !Array.isArray(a.findings) || a.findings.length > 30) throw new Error('invalid-response');
-  for (const f of a.findings) if (!f || typeof f.id !== 'string' || !categories.includes(f.category) || !['low','medium','high'].includes(f.severity) ||
+  if(a.protections!==undefined&&(!Array.isArray(a.protections)||a.protections.length>7))throw new Error('invalid-response');
+  for (const f of [...a.findings,...a.protections??[]]) if (!f || typeof f.id !== 'string' || !categories.includes(f.category) || !['low','medium','high'].includes(f.severity) ||
       typeof f.title !== 'string' || f.title.length > 200 || typeof f.explanation !== 'string' || f.explanation.length > 2000 ||
       typeof f.quote !== 'string' || f.quote.trim().length < 12 || !doc.text.includes(f.quote) || f.sourceUrl !== doc.url ||
       (f.startOffset !== undefined && (!Number.isInteger(f.startOffset) || doc.text.slice(f.startOffset,f.endOffset) !== f.quote))) throw new Error('invalid-response');
+  if(a.protections?.some(p=>a.findings.some(f=>f.category===p.category)))throw new Error('invalid-response');
   return a;
 }
 export function pendingState(pageKey:string,pageUrl:string,context:ConsentContext,documents:DiscoveredDocument[]): ReviewState {

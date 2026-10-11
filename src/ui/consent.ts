@@ -1,2 +1,2 @@
-/** Exact disclosure shown before opt-in, also available next to revocation. */
-export const aiDisclosure = 'Allow RedFlag to automatically send relevant public Terms, Privacy, and Additional Terms text and their source URLs to the configured RedFlag analysis server and Google Gemini in the background. After enabling, no per-document click is needed. Form values, account data, browsing history, and unrelated page content must not be sent. Your choice is saved on this device. You can turn this off at any time to stop new transmissions and cancel queued work. Requests already sent cannot be recalled.';
+/** Disclosure for onboarding and consent review. */
+export const aiDisclosure = 'Gemini receives public Privacy, Terms, and Cookie policy text and source URLs. ToS;DR receives the site domain. No form inputs or account data. Review setup to stop new AI requests.';

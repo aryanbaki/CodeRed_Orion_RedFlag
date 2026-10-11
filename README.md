@@ -1,40 +1,47 @@
-# Policy review framework
+# RedFlag 0.3.1
 
 A Chrome extension that combines community-reviewed insights and Google Gemini to explain terms and privacy policies, highlight sourced risks, and show personalized reminders before you agree.
 
-**Status: research and framework, not a finished risk analyzer.** The project license is undecided. Repository: [CodeRed_Orion_RedFlag](https://github.com/aryanbaki/CodeRed_Orion_RedFlag).
+**Status: locally verified developer extension; no public backend deployment.** The project license is undecided. Repository: [CodeRed_Orion_RedFlag](https://github.com/aryanbaki/CodeRed_Orion_RedFlag).
 
 ## What runs today
 
-- Manifest V3 automatic legal-link discovery on permitted websites, including footer policies and dynamic consent screens.
-- Popup with optional manual source preview.
-- Local priorities for privacy, renewal, cancellation, arbitration and content rights.
-- Automatically mounted multi-document warnings and explicit, revocable background-AI consent settings.
-- Explicitly fictional example demonstrating evidence and prioritization.
-- Original server-only Gemini adapter with structured output and exact-quote validation, tested with simulated responses.
-- Type checking, focused unit tests, build tooling, and GitHub Actions.
+- Always-visible overall review with Analyze all, plus Privacy, Cookies, and Terms cards with individual Analyze buttons and retrieved word counts.
+- Red flags show exact source passages, Summary shows supported risks and protections, and Chat answers questions using the retrieved policies with citations.
+- User-supplied glossy flag artwork and Avion typography.
+- Grades S, A, B, C, D, E; a neutral “?” badge means unknown / Unrated.
+- Installation grants HTTP/HTTPS site access. Public policy links and verified common policy addresses are checked automatically.
+- First-use onboarding enables automatic Gemini analysis or community ratings only. Settings has no priorities questionnaire.
+- Official ToS;DR API lookup with 42 bundled services, domain matching (including the standard www alias), source attribution, and cached results. Community ratings apply to the service and never invent individual policy grades.
+- My sites stores checked sites locally, shows overall grades, and ranks frequently checked sites first.
+- Primary model: Gemini 3.5 Flash, with Gemini 3.1 Flash-Lite then Gemini 2.5 Flash-Lite as backups. Backups use the same selected credential; missing evidence never triggers another model. Gemini 3.1 Flash-Lite passed a live structured-output check; 2.5 is currently unavailable for the configured key.
+- Server-only Gemini adapter with structured output, exact quotation validation, and independently evidenced policy categories. Fully evidenced protective policies can earn S.
+- Static legal containers with complete extracted text can be graded. Hidden sections, ambiguous structure, missing evidence, inaccessible documents, and absent configuration remain unrated.
 
-After scoped site/document permission grants, the extension retrieves public legal documents automatically. AI remains off until explicit opt-in; configured analysis requests go to the server, never directly to Gemini. The server backend is awaiting integration and the community catalog is empty by default. HTML extraction is conservatively partial and remains Unrated; exact findings can still be shown. The extension never changes site consent controls or waits on AI before allowing navigation. The Gemini adapter is excluded from the browser bundle.
+The overall Gemini grade is the worst supported grade across discovered documents, once Terms and Privacy are present and every discovered document is graded. A separate Cookie policy is optional because some sites include cookie terms in Privacy; its row shows a neutral “?” badge when no separate policy was found. During incomplete AI analysis, a current comprehensively reviewed ToS;DR service rating can supply the overall grade, with its source shown.
 
 ## Run locally
 
-Use Node.js 24 LTS and npm:
+Use Node.js 24 and npm:
 
 ```sh
 npm ci
 npm run check
+npm run test:popup-redesign
+node tests/extraction-browser.mjs
+npm run test:backend-browser
 ```
 
-1. Open `chrome://extensions` in Chrome.
-2. Enable Developer mode and choose **Load unpacked**.
-3. Select `dist/extension` from this checkout.
-4. Open an HTTP/HTTPS website and open RedFlag. The popup scans the current tab; Settings offers scoped site/document access or optional automatic discovery on all sites.
-5. Grants apply immediately. New permitted pages are scanned automatically; floating warnings appear on consent screens. Grant cross-origin document access when needed.
-6. Background AI requires explicit opt-in and backend configuration; see the integration instructions. Manual preview and the fictional example remain available separately.
+1. Open Chrome extensions, enable Developer mode, and load unpacked `dist/extension`.
+2. Reload an existing installation so the changed host permissions and new popup apply.
+3. Open RedFlag on a website and complete first-use setup once.
+4. For Gemini, configure the server as described in [Gemini backend setup](docs/gemini-backend.md), run `npm run start:server`, then import the generated `RedFlag-Local-Connection.json` in onboarding. The manifest has a stable extension ID, so moving the unpacked folder preserves the backend origin.
+5. Enable Gemini checks after reviewing the onboarding notice. Discovery and analysis then run automatically; Analyze all or individual Analyze buttons explicitly refresh the results.
+6. Use Review setup to change or revoke AI consent.
 
-Selected text takes precedence. Otherwise the prototype reads the first `main` or `article`, falling back to the page body. This is a basic extraction experiment: compare the preview with the policy, especially for collapsed sections or tables. Documents above 60,000 characters are rejected, never silently analyzed as complete. Text lives only in the open popup; closing it discards the text. Priorities, review enablement and background-AI consent are saved in local extension storage. AI consent defaults off. The popup itself never transmits the manual preview.
+Provider credentials stay in ignored local configuration. The saved free-profile credentials were reused for live Gemini checks: GitHub Privacy returned two exact-quote findings, and a Terms retry returned three. Both remained unrated because required category evidence was missing. Chromium UI/transport suites use simulated provider responses; the separate live check is recorded in docs/verification.md. This is local development configuration, not a deployed public backend.
 
-Run the isolated Chromium browser checks with `npx playwright install chromium` followed by `npm run test:browser`. Run `npm run test:ui` for synthetic multi-document warning fixtures (not live AI or discovery). Run `npm run test:discovery-browser` for actual MV3 discovery, background, and UI integration with controlled retrieval/AI responses. Browser checks use a temporary browser profile and do not modify your everyday Chrome profile.
+Refresh the attributed initial community snapshot with `node scripts/refresh-community.mjs`. API failures retain existing data. Old snapshots do not supply an overall community grade after seven days without refresh.
 
 ## Research and implementation
 
@@ -63,4 +70,6 @@ Research references: [ToS;DR](https://github.com/tosdr/browser-extensions), [Pri
 
 ## Local Gemini backend
 
-The server-only P0 demo endpoint is `POST /api/analyze`. Setup, canonical contracts, consent integration, exact-evidence validation, the explicit grading rubric and simulated-verification limits are documented in [docs/gemini-backend.md](docs/gemini-backend.md). Fill an ignored local `.env` from the blank `.env.example`, then run `npm run start:server`. Keep Google credentials on the server; the extension receives only a separate local demo access token.
+The local endpoints are `POST /api/analyze`, `POST /api/chat`, and authenticated `POST /api/health`. Setup, canonical contracts, consent integration, exact-evidence validation, the explicit grading rubric and simulated-verification limits are documented in [docs/gemini-backend.md](docs/gemini-backend.md). Fill an ignored local `.env` from the blank `.env.example`, then run `npm run start:server`. Keep Google credentials on the server; the extension receives only a separate local access token. Chat and complete retrieved policy text are transient, while bounded evidence and review metadata may be saved in My sites.
+
+Create the versioned loadable archive with `node scripts/package-extension.mjs` after building. It includes manifest.json at its root and excludes local connection credentials. See [current verification](docs/site-review-0.3.1.md).

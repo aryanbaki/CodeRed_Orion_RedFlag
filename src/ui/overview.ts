@@ -1,6 +1,8 @@
+import {ensureAppFont} from './font.ts';
+import {flagMark} from './branding.ts';
 import {element} from './dom.ts';
 import {reviewStyles} from './styles.ts';
-import {renderReview} from './review.ts';
+import {summarizeReview} from '../core/summary.ts';
 import type {ReviewState, RedFlagPreferences} from '../core/contracts.ts';
 
 export interface WarningOptions {
@@ -16,6 +18,7 @@ export interface WarningOptions {
 function mountProactiveWarning(options: WarningOptions) {
   const container = options.container ?? document.body;
   const doc = container.ownerDocument;
+  void ensureAppFont(doc).catch(()=>{});
   const host = element('div', undefined, undefined, doc);
   host.dataset.redflagUi = 'warning';
   host.style.cssText = 'position:fixed;right:12px;bottom:12px;width:min(420px,calc(100vw - 24px));z-index:2147483647;';
@@ -25,11 +28,11 @@ function mountProactiveWarning(options: WarningOptions) {
   panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', 'RedFlag agreement review');
   const header = element('header', undefined, undefined, doc);
   const heading = element('div', undefined, undefined, doc);
-  heading.append(element('p', 'REDFLAG · BEFORE YOU AGREE', 'eyebrow', doc), element('h2', 'Check the fine print.', undefined, doc));
+  heading.append(element('p', 'REDFLAG · BEFORE YOU AGREE', 'eyebrow', doc), element('h2', 'Overall grade', undefined, doc));
   const dismiss = element('button', 'Dismiss', undefined, doc); dismiss.type = 'button';
   const status = element('p', undefined, 'meta', doc); status.setAttribute('role','status'); status.setAttribute('aria-live','polite'); status.setAttribute('aria-atomic','true');
   const content = element('div', undefined, 'review-content', doc);
-  const settings = element('button', 'Privacy settings', undefined, doc); settings.type = 'button';
+  const settings = element('button', 'Open RedFlag', undefined, doc); settings.type = 'button';
   settings.addEventListener('click', () => options.onOpenSettings?.());
   header.append(heading, dismiss); panel.append(header, status, content, settings); root.append(style, panel);
   let dismissed = false; let destroyed = false;
@@ -39,7 +42,12 @@ function mountProactiveWarning(options: WarningOptions) {
     if (destroyed || dismissed) return;
     if (preferences?.enabled === false) {host.remove();return;}
     if (!host.isConnected) container.append(host);
-    renderReview(content, result, preferences, status);
+    const summary=summarizeReview(result);
+    const mark=element('div',undefined,'site-grade-mark',doc);
+    if(summary.grade!=='Unrated')mark.append(flagMark(summary.grade,doc));
+    const tile=element('div',summary.grade==='Unrated'?'?':summary.grade,'overall-grade',doc);tile.dataset.grade=summary.grade;tile.setAttribute('aria-label',summary.grade==='Unrated'?'Unknown grade':`Grade ${summary.grade}`);mark.append(tile);
+    content.replaceChildren(mark);
+    status.textContent=summary.pending?'Analyzing policies…':summary.source==='tosdr'?'ToS;DR community rating':summary.source==='gemini'?'Gemini analysis':'Not enough information';
   };
   dismiss.addEventListener('click', () => {
     dismissed = true; host.remove(); options.onDismiss?.();

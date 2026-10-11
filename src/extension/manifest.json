@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "RedFlag",
-  "version": "0.2.0",
-  "description": "Research framework for sourced policy explanations and personal privacy reminders.",
+  "version": "0.3.1",
+  "description": "Simple grades for website privacy, terms, and cookie policies.",
   "permissions": [
     "activeTab",
     "scripting",
@@ -29,13 +29,14 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; connect-src https: http:"
   },
-  "optional_host_permissions": [
-    "http://*/*",
-    "https://*/*"
-  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
-  "minimum_chrome_version": "120"
+  "minimum_chrome_version": "120",
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAj94nPz8KQzIsr58Fvfd5kj1VRYl/+CgPN8UttkrAtmxsh6in2RAQyIpJKSAdSBWzmGtlUcfC81jSuIPwv6UR9YXhd6DcSzWWnAkIEc5LNQ45551dpVBminCpoVWYEEe4AU/jGZLNLKMrsHSsgJnyivTl7p62+o5uxg4xayqc4DiYpRIm90DlRDxdgoaOmCwlLKjHzmJRSXeWLqqZRpF21n2ItK8T7RBz2X/2/1KSSEdAUIP0uxcuyQbqyOqHY7CAxIpEGORRbhXcPfcT7f51cKNvaLOvcXloiqQqgAGnjPyF45yhGGsrYXHPN6p7kq75snAqz3IaZtO5K6fCH94crQIDAQAB"
 }

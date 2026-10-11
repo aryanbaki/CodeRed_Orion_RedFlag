@@ -10,13 +10,15 @@ export const MAX_HISTORY_BYTES=1_000_000;
 export interface CheckedSite {
   origin:string;
   firstCheckedAt:string;
+  visitCount?:number;
   lastCheckedAt:string;
   generation:string;
   context:ReviewState['context'];
   documents:DocumentReview[];
+  community?:CommunityReference[];
 }
 export interface HistoryData {schemaVersion:typeof HISTORY_VERSION;sites:CheckedSite[];deleted:{origin:string;generation:string;at:string}[]}
-const kinds=['terms','privacy','additional','unknown'];
+const kinds=['terms','privacy','cookies','additional','unknown'];
 const reasons:UnratedReason[]=['pending','permission-required','authentication-required','inaccessible','unsupported','too-large','incomplete','insufficient-evidence','ai-consent-required','quota','timeout','invalid-response','unsafe-url','network-error'];
 const categories:RiskCategory[]=['sharing','retention','tracking','renewal','cancellation','arbitration','content-rights','other'];
 const text=(value:unknown,max:number):string => typeof value==='string' ? value.slice(0,max) : '';
@@ -42,13 +44,14 @@ function assessment(raw:unknown,document:DocumentReview['document']):DocumentAss
   const a=raw as DocumentAssessment;
   if (a.documentId!==document.id || source(a.documentUrl)!==document.url || a.kind!==document.kind || !date(a.analyzedAt) ||
     !['gemini','community'].includes(a.provider) || !['complete','partial','unknown'].includes(a.coverage) ||
-    !['A','B','C','D','E','F','Unrated'].includes(a.grade) || !Array.isArray(a.findings)) return;
-  const findings=a.findings.slice(0,30).flatMap(f=>{
+    !['S','A','B','C','D','E','Unrated'].includes(a.grade) || !Array.isArray(a.findings)) return;
+  const cleanEvidence=(values:DocumentAssessment['findings'])=>values.slice(0,30).flatMap(f=>{
     if(!f || !categories.includes(f.category) || !['low','medium','high'].includes(f.severity) || source(f.sourceUrl)!==document.url || typeof f.quote!=='string' || f.quote.length>2000) return [];
     return [{id:text(f.id,100),category:f.category,severity:f.severity,title:text(f.title,200),explanation:text(f.explanation,2000),quote:f.quote,sourceUrl:document.url}];
   });
+  const findings=cleanEvidence(a.findings),protections=Array.isArray(a.protections)?cleanEvidence(a.protections).slice(0,7):[];
   const evidenceIncomplete=findings.length!==a.findings.length;
-  return {documentId:document.id,documentUrl:document.url,kind:document.kind,grade:evidenceIncomplete?'Unrated':a.grade,coverage:evidenceIncomplete?'partial':a.coverage,findings,summary:text(a.summary,2000),
+  return {documentId:document.id,documentUrl:document.url,kind:document.kind,grade:evidenceIncomplete?'Unrated':a.grade,coverage:evidenceIncomplete?'partial':a.coverage,findings,protections,summary:text(a.summary,2000),
     reason:evidenceIncomplete?'incomplete':reasons.includes(a.reason!)?a.reason:undefined,provider:a.provider,analyzedAt:date(a.analyzedAt)!,model:text(a.model,200)||undefined,
     promptVersion:text(a.promptVersion,100),rubricVersion:text(a.rubricVersion,100),contentHash:text(a.contentHash,64)};
 }
@@ -58,26 +61,26 @@ function documentReview(raw:unknown,index:number):DocumentReview | undefined {
   if(!d || !kinds.includes(d.kind) || !date(d.discoveredAt)) return;
   const url=source(d.url);
   // Keep an independent blocked agreement, without storing its sensitive URL.
-  const document={id:text(d.id,100)||`document-${index}`,url:url??'',kind:d.kind,label:({terms:'Terms of Service',privacy:'Privacy Policy',additional:'Additional Terms',unknown:'Other agreement'})[d.kind],discoveredAt:date(d.discoveredAt)!};
+  const document={id:text(d.id,100)||`document-${index}`,url:url??'',kind:d.kind,label:({terms:'Terms of Service',privacy:'Privacy Policy',cookies:'Cookie Policy',additional:'Additional Terms',unknown:'Other agreement'})[d.kind],discoveredAt:date(d.discoveredAt)!};
   const a=url?assessment(r.assessment,document):undefined;
   const coverage=['complete','partial','unknown'].includes(r.coverage)?r.coverage:'unknown';
   const grade=supportedDocumentGrade({...r,document,assessment:a,coverage});
   const status=grade!=='Unrated'?'ready':r.status==='pending' && url?'pending':'unrated';
   const freshness=r.freshness??{};
-  return {document,status,grade,coverage,reason:!url?'unsafe-url':status==='pending'?'pending':grade==='Unrated'?(reasons.includes(r.reason!)?r.reason:a?.reason??'insufficient-evidence'):undefined,
+  return {document,status,grade,coverage,wordCount:Number.isSafeInteger(r.wordCount) && r.wordCount! >= 0 && r.wordCount! <= 250000 ? r.wordCount : undefined,reason:!url?'unsafe-url':status==='pending'?'pending':grade==='Unrated'?(reasons.includes(r.reason!)?r.reason:a?.reason??'insufficient-evidence'):undefined,
     freshness:{retrievedAt:date(freshness.retrievedAt),documentUpdatedAt:date(freshness.documentUpdatedAt),analyzedAt:date(freshness.analyzedAt),cacheExpiresAt:date(freshness.cacheExpiresAt)},
     ...(r.failure && ['retrieval','analysis'].includes(r.failure.stage) && reasons.includes(r.failure.code)?{failure:reviewFailure(r.failure.stage,r.failure.code,r.failure.retryAfterSeconds)}:{}),
     community:Array.isArray(r.community)?r.community.slice(0,4).map(community).filter((v):v is CommunityReference=>!!v):[],assessment:a,cached:r.cached===true};
 }
 export function snapshotReview(raw:ReviewState):CheckedSite {
-  if(raw.schemaVersion!==CONTRACT_VERSION || !['signup','checkout','onboarding','consent','browsing'].includes(raw.context) || !Array.isArray(raw.documents) || !raw.documents.length || !date(raw.updatedAt)) throw new Error('Only checked-site reviews can be saved.');
+  if(raw.schemaVersion!==CONTRACT_VERSION || !['signup','checkout','onboarding','consent','browsing'].includes(raw.context) || !Array.isArray(raw.documents) || !date(raw.updatedAt)) throw new Error('Only checked-site reviews can be saved.');
   const origin=checkedOrigin(raw.pageUrl),documents=raw.documents.slice(0,24).map(documentReview).filter((v):v is DocumentReview=>!!v);
-  if(!documents.length) throw new Error('No supported review documents to save.');
+  if(!documents.length && !raw.community?.length) throw new Error('No supported review documents to save.');
   const at=date(raw.updatedAt)!;
-  return {origin,firstCheckedAt:at,lastCheckedAt:at,generation:text(raw.pageKey,100),context:raw.context,documents};
+  return {origin,firstCheckedAt:at,lastCheckedAt:at,generation:text(raw.pageKey,100),context:raw.context,documents,community:raw.community?.slice(0,4).map(community).filter((r):r is CommunityReference=>!!r)};
 }
 export function reviewFromSite(site:CheckedSite):ReviewState {
-  return {schemaVersion:CONTRACT_VERSION,pageKey:site.generation,pageUrl:site.origin+'/',context:site.context,documents:site.documents,updatedAt:site.lastCheckedAt};
+  return {schemaVersion:CONTRACT_VERSION,pageKey:site.generation,pageUrl:site.origin+'/',context:site.context,documents:site.documents,community:site.community,updatedAt:site.lastCheckedAt};
 }
 export function pruneHistory(data:HistoryData,now=Date.now()):HistoryData {
   const cutoff=now-RETENTION_DAYS*86400000;
@@ -94,7 +97,7 @@ export function decodeHistory(raw:unknown,now=Date.now()):{data:HistoryData;unsu
   if(!Array.isArray(data.sites) || !Array.isArray(data.deleted)) return {data:empty,unsupported:true};
   const sites:CheckedSite[]=[];
   for(const s of data.sites.slice(0,MAX_SITES*2)) {
-    try {const clean=snapshotReview(reviewFromSite(s));clean.firstCheckedAt=date(s.firstCheckedAt)??clean.lastCheckedAt;sites.push(clean);}catch{/* Discard malformed older entries, never render arbitrary storage objects. */}
+    try {const clean=snapshotReview(reviewFromSite(s));clean.firstCheckedAt=date(s.firstCheckedAt)??clean.lastCheckedAt;clean.visitCount=Number.isSafeInteger(s.visitCount)&&s.visitCount!>0?Math.min(s.visitCount!,100000):1;sites.push(clean);}catch{/* Discard malformed older entries, never render arbitrary storage objects. */}
   }
   const deleted=data.deleted.slice(-100).flatMap(d=>{try{return date(d.at)?[{origin:checkedOrigin(d.origin),generation:text(d.generation,100),at:date(d.at)!}]:[];}catch{return [];}});
   return {data:pruneHistory({schemaVersion:HISTORY_VERSION,sites,deleted},now),unsupported:false};

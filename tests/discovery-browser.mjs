@@ -20,12 +20,14 @@ try {
   const id=new URL(worker.url()).host;
   await worker.evaluate(async () => {
     globalThis.testEpoch='initial';globalThis.requests=[];
+    const nativeFetch=globalThis.fetch;
     globalThis.fetch=async (url,init) => {
+      if(!String(url).startsWith('https:')&&!String(url).startsWith('http:'))return nativeFetch(url,init);
       globalThis.requests.push({url:String(url),credentials:init?.credentials,body:init?.body});
       if (String(url).endsWith('/api/analyze')) {
         if (globalThis.holdAi) return new Promise(() => {});
         const request=JSON.parse(init.body),doc=request.document;
-        return new Response(JSON.stringify({schemaVersion:1,assessment:{documentId:doc.id,documentUrl:doc.url,kind:doc.kind,grade:'Unrated',reason:'incomplete',coverage:doc.coverage,findings:[],summary:'Partial evidence',provider:'gemini',analyzedAt:new Date().toISOString(),model:'test-model',promptVersion:'p1',rubricVersion:'r1',contentHash:doc.contentHash}}),{headers:{'content-type':'application/json'}});
+        return new Response(JSON.stringify({schemaVersion:1,assessment:{documentId:doc.id,documentUrl:doc.url,kind:doc.kind,grade:'Unrated',reason:'incomplete',coverage:doc.coverage,findings:[],summary:'Partial evidence',provider:'gemini',analyzedAt:new Date().toISOString(),model:'gemini-test',promptVersion:'redflag.prompt.v2',rubricVersion:'redflag.rubric.v3',contentHash:doc.contentHash}}),{headers:{'content-type':'application/json'}});
       }
       if (String(url).endsWith('/suspend')) return new Promise(() => {});
       if (String(url).endsWith('/missing')) return new Response('Missing',{status:404,headers:{'content-type':'text/plain'}});
@@ -46,7 +48,7 @@ try {
     await expect.poll(async () => (await getState())?.documents.length).toBe(5);
     await expect.poll(async () => (await getState())?.documents.every(d=>d.status==='unrated')).toBe(true);
     const state=await getState();assert.equal(state.context,kind);assert.ok(state.documents.every(d=>d.reason==='ai-consent-required'));assert.equal(state.documents.filter(d=>d.document.kind==='terms').length,3);
-    if(withOverview){await expect(page.getByRole('region',{name:'RedFlag agreement review'})).toBeVisible();await expect(page.getByRole('region',{name:'RedFlag agreement review'})).toContainText('Privacy Policy');}
+    if(withOverview){await expect(page.getByRole('region',{name:'RedFlag agreement review'})).toBeVisible();await expect(page.getByRole('region',{name:'RedFlag agreement review'})).toContainText('Overall grade');await expect(page.getByRole('region',{name:'RedFlag agreement review'}).locator('.overall-grade')).toHaveText('?');}
     assert.equal(await page.locator('#agree').isChecked(),false);assert.equal(page.url(),'https://service.com/'+path);
   }
   const oldPageKey=(await getState()).pageKey;
@@ -83,24 +85,24 @@ try {
   // Consented transport is simulated; verify transmitted text and revocation.
   await popup.evaluate(async()=>{
     const now=new Date().toISOString();
-    await chrome.storage.local.set({'redflag.backend.v1':{baseUrl:'https://documents.org',accessToken:'demo-test-token',model:'test-model',promptVersion:'p1',rubricVersion:'r1'},'redflag.preferences.v1':{schemaVersion:1,enabled:true,priorities:[],aiConsent:{enabled:true,grantedAt:now,updatedAt:now,noticeVersion:'2026-10-11-v1'}}});
+    await chrome.storage.local.set({'redflag.backend.v1':{baseUrl:'https://documents.org',accessToken:'synthetic-backend-access-token-123456',model:'gemini-test',promptVersion:'redflag.prompt.v2',rubricVersion:'redflag.rubric.v3'},'redflag.preferences.v1':{schemaVersion:1,enabled:true,priorities:[],aiConsent:{enabled:true,grantedAt:now,updatedAt:now,noticeVersion:'2026-10-11-v1'}}});
   });
-  await expect.poll(async()=>worker.evaluate(()=>requests.filter(r=>r.body).length)).toBeGreaterThan(0);
+  await expect.poll(async()=>worker.evaluate(()=>requests.filter(r=>r.url.endsWith('/api/analyze')).length)).toBeGreaterThan(0);
   await expect.poll(async()=> (await getState())?.documents.filter(d=>d.assessment).length).toBeGreaterThan(0);
-  const transmissions=await worker.evaluate(()=>requests.filter(r=>r.body));
+  const transmissions=await worker.evaluate(()=>requests.filter(r=>r.url.endsWith('/api/analyze')));
   assert.ok(transmissions.every(r=>!r.body.includes('private-account')&&!r.body.includes('private-form-value')&&!r.body.includes('private-script-value')));
   for(const r of transmissions){const body=JSON.parse(r.body);assert.deepEqual(Object.keys(body).sort(),['document','schemaVersion']);assert.ok(body.document.url.includes('/'));assert.equal(body.document.coverage,'partial');}
   await worker.evaluate(()=>{globalThis.holdAi=true;});
-  const sentBefore=await worker.evaluate(()=>requests.filter(r=>r.body).length);
+  const sentBefore=await worker.evaluate(()=>requests.filter(r=>r.url.endsWith('/api/analyze')).length);
   await page.evaluate(()=>{const form=document.createElement('form');form.innerHTML='<p>Consent: I agree to <a href="/delayed">Additional Terms</a></p>';document.body.append(form);});
-  await expect.poll(async()=>worker.evaluate(()=>requests.filter(r=>r.body).length)).toBeGreaterThan(sentBefore);
+  await expect.poll(async()=>worker.evaluate(()=>requests.filter(r=>r.url.endsWith('/api/analyze')).length)).toBeGreaterThan(sentBefore);
   await page.locator('input:not([type])').fill('user can keep browsing');
   await popup.evaluate(async()=>{const value=(await chrome.storage.local.get('redflag.preferences.v1'))['redflag.preferences.v1'];value.aiConsent.enabled=false;value.aiConsent.updatedAt=new Date().toISOString();await chrome.storage.local.set({'redflag.preferences.v1':value});});
   await expect.poll(async()=> (await getState())?.documents.find(d=>d.document.url.endsWith('/delayed'))?.reason).toBe('ai-consent-required');
-  const afterRevocation=await worker.evaluate(()=>requests.filter(r=>r.body).length);
+  const afterRevocation=await worker.evaluate(()=>requests.filter(r=>r.url.endsWith('/api/analyze')).length);
   await page.evaluate(()=>{const form=document.createElement('form');form.innerHTML='<p>Consent: I agree to <a href="/revoked">Additional Terms</a></p>';document.body.append(form);});
   await expect.poll(async()=> (await getState())?.documents.find(d=>d.document.url.endsWith('/revoked'))?.reason).toBe('ai-consent-required');
-  assert.equal(await worker.evaluate(()=>requests.filter(r=>r.body).length),afterRevocation);
+  assert.equal(await worker.evaluate(()=>requests.filter(r=>r.url.endsWith('/api/analyze')).length),afterRevocation);
   if(withOverview){await page.getByRole('button',{name:'Dismiss',exact:true}).click();await expect(page.locator('[data-redflag-ui]')).toHaveCount(0);}
   // Native worker suspension/restart: session storage preserves job/state data.
   await expect.poll(async()=> (await getState())?.documents.every(d=>d.status!=='pending')).toBe(true);

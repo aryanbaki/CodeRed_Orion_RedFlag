@@ -24,12 +24,12 @@ try {
   const at=new Date().toISOString();
   const doc=(kind,grade='D',partial=false)=>{
     const url=`https://public-policies.com/${kind}`;
-    return {document:{id:kind,url,kind,label:kind,discoveredAt:at},status:grade==='Unrated'?'unrated':'ready',grade,coverage:partial?'partial':'complete',reason:partial?'incomplete':undefined,freshness:{retrievedAt:at,analyzedAt:at},cached:false,community:kind==='terms'?[{provider:'tosdr',serviceId:'1',serviceName:'Fixture service',sourceUrl:'https://tosdr.org/en/service/1',rating:'B',scope:'service',reviewStatus:'reviewed',reviewedAt:'2025-01-01T00:00:00Z',recordUpdatedAt:'2025-01-02T00:00:00Z',fetchedAt:at,freshness:'stale',attribution:'Fixture: ToS;DR contributors · CC BY-SA 3.0'}]:[],assessment:{documentId:kind,documentUrl:url,kind,grade,coverage:partial?'partial':'complete',reason:partial?'incomplete':undefined,findings:[{id:'finding',category:'retention',severity:'high',title:'Indefinite retention — fixture',explanation:'This simulated finding illustrates evidence display.',quote:'We keep records indefinitely.',sourceUrl:url}],summary:'Fixture result; no live provider was used.',provider:'gemini',analyzedAt:at,model:'fixture-model',promptVersion:'p1',rubricVersion:'r1',contentHash:'a'.repeat(64)}};
+    return {document:{id:kind,url,kind,label:kind,discoveredAt:at},status:grade==='Unrated'?'unrated':'ready',grade,coverage:partial?'partial':'complete',reason:partial?'incomplete':undefined,freshness:{retrievedAt:at,analyzedAt:at},cached:false,community:kind==='terms'?[{provider:'tosdr',serviceId:'1',serviceName:'Fixture service',sourceUrl:'https://tosdr.org/en/service/1',rating:'B',scope:'service',reviewStatus:'reviewed',reviewedAt:'2025-01-01T00:00:00Z',recordUpdatedAt:'2025-01-02T00:00:00Z',fetchedAt:at,freshness:'stale',attribution:'Fixture: ToS;DR contributors · CC BY-SA 3.0'}]:[],assessment:{documentId:kind,documentUrl:url,kind,grade,coverage:partial?'partial':'complete',reason:partial?'incomplete':undefined,findings:[{id:'finding',category:'retention',severity:'high',title:'Indefinite retention — fixture',explanation:'This simulated finding illustrates evidence display.',quote:'We keep records indefinitely.',sourceUrl:url}],summary:'Fixture result; no live provider was used.',provider:'gemini',analyzedAt:at,model:'fixture-model',promptVersion:'p1',rubricVersion:'redflag.rubric.v3',contentHash:'a'.repeat(64)}};
   };
   const state=(host='university.edu',generation='test-generation')=>({schemaVersion:1,pageKey:generation,pageUrl:`https://${host}/signup?private=secret`,context:'signup',updatedAt:at,documents:[doc('terms','D'),doc('privacy','B'),doc('additional','Unrated',true)]});
   await helperPage.evaluate(async states=>{for(const s of states)await testHistory.recordReview(s);},[state(),state('shop.com')]);
   await expect(dashboard.locator('.site-row')).toHaveCount(2);
-  await expect(dashboard.locator('.policy-badge').first()).toContainText('D');
+  await expect(dashboard.locator('.policy-badge').first()).toHaveText('Overall · ?');await expect(dashboard.locator('.policy-badge').first()).toHaveAttribute('aria-label','Overall grade unknown');
   await dashboard.screenshot({path:'dist/screenshots/my-sites-list.png',fullPage:true});
   await dashboard.getByRole('link',{name:'university.edu',exact:true}).click();
   await expect(dashboard.getByRole('heading',{name:'university.edu',exact:true})).toBeVisible();
@@ -42,7 +42,7 @@ try {
   await dashboard.screenshot({path:'dist/screenshots/my-sites-detail.png',fullPage:true});
   await dashboard.getByRole('button',{name:'Re-check site',exact:true}).click();
   await expect(dashboard.locator('#status')).toContainText(withSavedActions?/Recheck queued/:/unavailable|invalid/i);
-  if(withSavedActions){await expect.poll(async()=>helperPage.evaluate(async()=>{const sites=await testHistory.listHistory();return sites.find(s=>s.origin==='https://university.edu')?.documents.every(d=>d.status!=='pending');})).toBe(true);assert.equal((await helperPage.evaluate(()=>testHistory.listHistory())).find(s=>s.origin==='https://university.edu').documents[0].reason,'permission-required');}
+  if(withSavedActions){await expect.poll(async()=>helperPage.evaluate(async()=>{const sites=await testHistory.listHistory();return sites.find(s=>s.origin==='https://university.edu')?.documents.every(d=>d.status!=='pending');})).toBe(true);assert.ok((await helperPage.evaluate(()=>testHistory.listHistory())).find(s=>s.origin==='https://university.edu').documents.every(d=>d.grade==='Unrated'));}
   await expect(dashboard.getByRole('button',{name:'Re-check site',exact:true})).toBeEnabled();
   const update=state();update.updatedAt=new Date(Date.now()+1000).toISOString();update.documents[1]=doc('privacy','Unrated',true);
   await helperPage.evaluate(s=>testHistory.recordReview(s),update);
@@ -51,12 +51,12 @@ try {
   // Shared local settings synchronize both ways with the actual popup.
   const popup=await context.newPage();await popup.goto(base+'/popup.html');await popup.locator('#settings-link').click();
   await dashboard.getByRole('link',{name:'Settings',exact:true}).click();
-  await dashboard.getByRole('checkbox',{name:'Allow background AI analysis',exact:false}).check();
-  await expect(popup.getByRole('button',{name:'Turn off background AI analysis'})).toBeVisible();
-  await popup.getByRole('button',{name:'Turn off background AI analysis'}).click();
-  await expect(dashboard.getByRole('checkbox',{name:'Allow background AI analysis',exact:false})).not.toBeChecked();
-  await dashboard.getByRole('checkbox',{name:'Data retention',exact:true}).check();
-  await expect(popup.getByRole('checkbox',{name:'Data retention',exact:true})).toBeChecked();
+  await expect(dashboard.getByRole('button',{name:'Review setup',exact:true})).toBeVisible();
+  await expect(dashboard.locator('input[type=checkbox]')).toHaveCount(1);
+  await dashboard.getByRole('checkbox',{name:'Enable RedFlag',exact:false}).uncheck();
+  await expect(popup.getByRole('checkbox',{name:'Automatic checks',exact:false})).not.toBeChecked();
+  await popup.getByRole('checkbox',{name:'Automatic checks',exact:false}).check();
+  await expect(dashboard.getByRole('checkbox',{name:'Enable RedFlag',exact:false})).toBeChecked();
   await dashboard.screenshot({path:'dist/screenshots/my-sites-settings.png',fullPage:true});
   await dashboard.setViewportSize({width:720,height:900});await dashboard.screenshot({path:'dist/screenshots/my-sites-settings-720.png',fullPage:true});
   assert.equal(await dashboard.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
@@ -76,8 +76,8 @@ try {
   // Restart the complete browser/profile, not merely reload a component.
   await context.close();context=await launch();
   const reopened=await context.newPage();await reopened.goto(base+'/dashboard.html');await expect(reopened.locator('.site-row')).toHaveCount(1);
-  await reopened.getByRole('link',{name:'Settings',exact:true}).click();await expect(reopened.getByRole('checkbox',{name:'Data retention',exact:true})).toBeChecked();await expect(reopened.getByRole('checkbox',{name:'Allow background AI analysis',exact:false})).not.toBeChecked();
+  await reopened.getByRole('link',{name:'Settings',exact:true}).click();await expect(reopened.getByRole('checkbox',{name:'Enable RedFlag',exact:false})).toBeChecked();await expect(reopened.getByText('Community ratings only',{exact:true})).toBeVisible();
   await reopened.getByRole('link',{name:'My Sites',exact:true}).click();await reopened.getByRole('button',{name:'Clear history',exact:true}).click();await reopened.getByRole('button',{name:'Confirm deletion'}).click();await expect(reopened.getByRole('heading',{name:'Your reviews belong here.'})).toBeVisible();
-  await reopened.getByRole('link',{name:'Settings',exact:true}).click();await expect(reopened.getByRole('checkbox',{name:'Data retention',exact:true})).toBeChecked();
+  await reopened.getByRole('link',{name:'Settings',exact:true}).click();await expect(reopened.getByRole('checkbox',{name:'Enable RedFlag',exact:false})).toBeChecked();
   console.log('Dashboard unpacked-extension checks passed: empty/multiple/independent/partial reviews, updates, attribution/source links, popup consent sync, responsive widths, keyboard navigation, failed deletion, restart persistence, delete/clear. Provider data is explicitly simulated.');
 }finally{await context?.close();await rm(root,{recursive:true,force:true});}

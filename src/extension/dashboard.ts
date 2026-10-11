@@ -4,10 +4,8 @@ import {PREFERENCES_STORAGE_KEY, type RedFlagPreferences} from '../core/contract
 import {listHistory,deleteHistory,clearHistory,subscribeHistory,type CheckedSite} from '../history/store.ts';
 import {reviewFromSite,RETENTION_DAYS,MAX_SITES} from '../history/model.ts';
 import {applyTheme} from '../ui/theme.ts';
-import {loadPreferences,savePreferences,changeConsent} from '../ui/preferences.ts';
-import {aiDisclosure} from '../ui/consent.ts';
+import {loadPreferences,savePreferences} from '../ui/preferences.ts';
 import {gradeLegend,renderDashboardReview} from '../ui/dashboard-review.ts';
-import {priorityLabels} from '../ui/review.ts';
 import {element,dateLabel} from '../ui/dom.ts';
 applyTheme();
 document.querySelector('.skip-link')!.addEventListener('click',event=>{event.preventDefault();document.querySelector<HTMLElement>('#main')!.focus();});
@@ -25,12 +23,12 @@ function confirmAction(container:HTMLElement,prompt:string,action:()=>Promise<vo
   const cancel=control('Cancel',()=>{box.remove();container.querySelector<HTMLButtonElement>('.danger')?.focus();});
   box.append(element('p',prompt),confirm,cancel);container.append(box);cancel.focus();
 }
-function badges(site:CheckedSite){const row=element('div',undefined,'policy-badges');for(const r of site.documents){const grade=r.status==='pending'?'Pending':supportedDocumentGrade(r);const badge=element('span',`${r.document.label} · ${grade}`,'policy-badge');badge.dataset.grade=grade;row.append(badge);}return row;}
+function badges(site:CheckedSite){const row=element('div',undefined,'policy-badges'),summary=summarizeReview(reviewFromSite(site));const badge=element('span','Overall · '+(summary.grade==='Unrated'?'?':summary.grade),'policy-badge');badge.dataset.grade=summary.grade;badge.setAttribute('aria-label',summary.grade==='Unrated'?'Overall grade unknown':`Overall grade ${summary.grade}`);row.append(badge);return row;}
 function sitesView(){
-  const title=heading('My Sites','Your recently checked sites, with each agreement kept independent.');
+  const title=heading('My Sites','Your sites and their overall grades.');
   title.append(control('Clear history',()=>confirmAction(view,'Delete all saved checked-site reviews on this device? Settings and AI consent will stay unchanged.',clearHistory),'danger'));
   view.append(title,gradeLegend());
-  if(!sites.length){const empty=element('section',undefined,'empty');empty.append(element('p','NOTHING SAVED YET','eyebrow'),element('h2','Your reviews belong here.'),element('p','When RedFlag checks agreements on a supported site, the review is saved locally. Open the popup on that site to grant reading access. No general browsing history is recorded.','subtitle'));view.append(empty);}
+  if(!sites.length){const empty=element('section',undefined,'empty');empty.append(element('p','NOTHING SAVED YET','eyebrow'),element('h2','Your reviews belong here.'),element('p','Sites appear here after RedFlag checks them.','subtitle'));view.append(empty);}
   const list=element('div',undefined,'sites-list');
   for(const site of sites){const row=element('article',undefined,'site-row'),copy=element('div');const link=element('a',new URL(site.origin).hostname,'site-title');link.href='#site='+encodeURIComponent(site.origin);copy.append(link,element('p',`Last checked ${dateLabel(site.lastCheckedAt)} · ${site.documents.length} agreement${site.documents.length===1?'':'s'}`,'site-meta'),badges(site));const remove=control('Delete',()=>confirmAction(row,`Delete the saved review for ${new URL(site.origin).hostname}?`,()=>deleteHistory(site.origin)),'danger');remove.setAttribute('aria-label',`Delete saved review for ${new URL(site.origin).hostname}`);row.append(copy,remove);list.append(row);}
   view.append(list,element('p',`Only checked-site reviews are saved here. Up to ${MAX_SITES} sites for ${RETENTION_DAYS} days, within a 1 MB limit. Source evidence may reflect an older document; recheck before relying on it.`,'retention'));
@@ -48,7 +46,7 @@ function detailView(origin:string){
   const back=element('a','← All checked sites','back');back.href='#sites';view.append(back);
   const site=sites.find(s=>s.origin===origin);
   if(!site){view.append(heading('Review unavailable','This review was deleted, expired, or could not be saved.'));return;}
-  const title=heading(new URL(site.origin).hostname,'Saved review · each agreement has its own coverage, evidence and grade.');
+  const title=heading(new URL(site.origin).hostname,'Privacy, Terms, and Cookies.');
   const actions=element('div',undefined,'actions');const again=control('Re-check site',()=>{void recheck(site,again);},'primary');actions.append(again,control('Delete review',()=>confirmAction(view,'Delete this saved review? Settings and AI consent will stay unchanged.',()=>deleteHistory(site.origin)),'danger'));title.append(actions);view.append(title,element('p',`First checked ${dateLabel(site.firstCheckedAt)} · Last checked ${dateLabel(site.lastCheckedAt)}`,'meta'));
   const summary=summarizeReview(reviewFromSite(site));
   view.append(element('p',`${summary.graded} of ${summary.total} agreements graded${summary.pending?' · '+summary.pending+' still checking':''}. ${summary.unrated?'Some documents remain Unrated.':'All discovered documents have a supported grade.'}`,'detail-status'),gradeLegend());
@@ -65,16 +63,16 @@ async function updatePreferences(change:(current:RedFlagPreferences)=>RedFlagPre
   preferences=await loadPreferences();
 }
 function settingsView(){
-  view.append(heading('Settings','Your preferences and privacy choices, saved only on this device.'));
-  const grid=element('div',undefined,'settings-grid');
-  const general=element('section',undefined,'settings-card');general.append(element('h2','Automatic reviews'),setting('Enable RedFlag','Check public agreements on sites where you allow reading access.',preferences.enabled,enabled=>updatePreferences(p=>({...p,enabled}))));
-  const priorities=element('section',undefined,'settings-card');priorities.append(element('h2','What matters to you'),element('p','Priorities reorder supported concerns. They never change document grades.','note'));const options=element('div',undefined,'priorities');
-  for(const [category,label] of Object.entries(priorityLabels)){const key=category as keyof typeof priorityLabels;const row=setting(label,'',preferences.priorities.includes(key),enabled=>updatePreferences(p=>({...p,priorities:enabled?[...new Set([...p.priorities,key])]:p.priorities.filter(v=>v!==key)})));row.querySelector('input')!.dataset.priority=key;options.append(row);}priorities.append(options);
-  const ai=element('section',undefined,'settings-card');ai.append(element('h2','Background AI analysis'),element('p','External analysis is optional. Reading access and AI consent are separate choices.','note'),setting('Allow background AI analysis',aiDisclosure,preferences.aiConsent.enabled,enabled=>updatePreferences(p=>changeConsent(p,enabled,new Date().toISOString()))));ai.querySelector('input')!.id='ai-consent';general.querySelector('input')!.id='enabled';
-  const consentDate=element('p',`Consent last changed: ${dateLabel(preferences.aiConsent.updatedAt)}. Requests already sent cannot be recalled.`,'meta');consentDate.id='consent-date';ai.append(consentDate);
-  const local=element('section',undefined,'settings-card');local.append(element('h2','Local review history'),element('p',`Up to ${MAX_SITES} checked sites are retained for ${RETENTION_DAYS} days within a 1 MB limit. Only site origins, public document links, supported evidence and review metadata are saved. Deleting history does not change settings or revoke reading permissions.`,'note'),control('Clear history',()=>confirmAction(local,'Delete all locally saved checked-site reviews?',clearHistory),'danger'));grid.append(general,priorities,ai,local);view.append(grid);
+ view.append(heading('Settings','Saved on this device.'));
+ const general=element('section',undefined,'settings-card');
+ general.append(element('h2','Automatic checks'),setting('Enable RedFlag','',preferences.enabled,enabled=>updatePreferences(p=>({...p,enabled}))));
+ general.querySelector('input')!.id='enabled';
+ general.append(element('p',preferences.aiConsent.enabled?'Gemini analysis enabled':'Community ratings only','note'),control('Review setup',()=>{void chrome.tabs.create({url:chrome.runtime.getURL('popup.html')+'#onboarding'});}));
+ const local=element('section',undefined,'settings-card');
+ local.append(element('h2','My sites'),element('p',`Saved for ${RETENTION_DAYS} days on this device.`,'note'),control('Clear history',()=>confirmAction(local,'Delete all saved reviews?',clearHistory),'danger'));
+ view.append(general,local);
 }
-function syncSettings(){if(!route().settings)return;const consentDate=document.querySelector('#consent-date');if(consentDate)consentDate.textContent=`Consent last changed: ${dateLabel(preferences.aiConsent.updatedAt)}. Requests already sent cannot be recalled.`;const enabled=document.querySelector<HTMLInputElement>('#enabled'),ai=document.querySelector<HTMLInputElement>('#ai-consent');if(enabled)enabled.checked=preferences.enabled;if(ai)ai.checked=preferences.aiConsent.enabled;for(const input of document.querySelectorAll<HTMLInputElement>('[data-priority]'))input.checked=preferences.priorities.includes(input.dataset.priority as keyof typeof priorityLabels);}
+function syncSettings(){if(!route().settings)return;const enabled=document.querySelector<HTMLInputElement>('#enabled');if(enabled)enabled.checked=preferences.enabled;const note=document.querySelector('#view .settings-card .note');if(note)note.textContent=preferences.aiConsent.enabled?'Gemini analysis enabled':'Community ratings only';}
 function render(){const current=route(),routeKey=location.hash;const openKeys=renderedRoute===routeKey?[...view.querySelectorAll<HTMLDetailsElement>('details[open][data-key]')].map(d=>d.dataset.key):[];view.replaceChildren();document.querySelector('#sites-nav')!.setAttribute('aria-current',current.settings?'false':'page');document.querySelector('#settings-nav')!.setAttribute('aria-current',current.settings?'page':'false');if(current.settings)settingsView();else if(historyLoadError){view.append(heading('History unavailable','Your settings remain available. Retry or explicitly clear an unsupported history format.'),control('Retry',()=>{void refresh();}),control('Clear history',()=>confirmAction(view,'Reset saved history on this device?',clearHistory),'danger'));}else if(current.origin)detailView(current.origin);else sitesView();for(const details of view.querySelectorAll<HTMLDetailsElement>('details[data-key]'))if(openKeys.includes(details.dataset.key))details.open=true;renderedRoute=routeKey;}
 async function refresh(){const id=++loadId;try{const next=await listHistory();if(id!==loadId)return;sites=next;historyLoadError=undefined;if(route().settings){syncSettings();return;}const active=document.activeElement instanceof HTMLElement?document.activeElement:null;const key=active?.getAttribute('aria-label')??active?.textContent;render();if(key)[...view.querySelectorAll<HTMLElement>('button,a,summary')].find(e=>(e.getAttribute('aria-label')??e.textContent)===key)?.focus({preventScroll:true});}catch(error){historyLoadError=message(error);say(historyLoadError);if(!route().settings)render();}}
 subscribeHistory(()=>{void refresh();});

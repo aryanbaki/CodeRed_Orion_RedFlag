@@ -2,10 +2,10 @@
 export const CONTRACT_VERSION = 1 as const;
 export const PREFERENCES_STORAGE_KEY = 'redflag.preferences.v1';
 export const AI_NOTICE_VERSION = '2026-10-11-v1';
-export type DocumentKind = 'terms' | 'privacy' | 'additional' | 'unknown';
+export type DocumentKind = 'terms' | 'privacy' | 'cookies' | 'additional' | 'unknown';
 export type ConsentContext = 'signup' | 'checkout' | 'onboarding' | 'consent' | 'browsing';
 export type RiskCategory = 'sharing' | 'retention' | 'tracking' | 'renewal' | 'cancellation' | 'arbitration' | 'content-rights' | 'other';
-export type RiskGrade = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'Unrated';
+export type RiskGrade = 'S' | 'A' | 'B' | 'C' | 'D' | 'E' | 'Unrated';
 export type Coverage = 'complete' | 'partial' | 'unknown';
 export type UnratedReason = 'pending' | 'permission-required' | 'authentication-required' | 'inaccessible' | 'unsupported' | 'too-large' | 'incomplete' | 'insufficient-evidence' | 'ai-consent-required' | 'quota' | 'timeout' | 'invalid-response' | 'unsafe-url' | 'network-error';
 
@@ -64,6 +64,8 @@ export interface DocumentAssessment {
   grade: RiskGrade;
   coverage: Coverage;
   findings: EvidenceFinding[];
+  /** Exact cited protections, never inferred from absent risks. */
+  protections?: EvidenceFinding[];
   summary: string;
   /** Required when grade is Unrated. Never interpret an empty findings array as safe. */
   reason?: UnratedReason;
@@ -76,6 +78,8 @@ export interface DocumentAssessment {
 }
 
 export interface DocumentReview {
+  /** Extracted public policy words; raw document text stays transient. */
+  wordCount?: number;
   document: DiscoveredDocument;
   status: 'pending' | 'ready' | 'unrated';
   grade: RiskGrade;
@@ -95,6 +99,8 @@ export interface ReviewState {
   /** Page URL without credentials, query, or fragment; not sent to Gemini. */
   pageUrl: string;
   context: ConsentContext;
+  community?: CommunityReference[];
+  discoveryPending?: boolean;
   documents: DocumentReview[];
   updatedAt: string;
 }

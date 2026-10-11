@@ -22,3 +22,5 @@ jobs:
       - run: npm run test:backend-browser
       - run: npm run test:popup-redesign
       - run: npm run test:dashboard
+      - run: npm run test:branding
+      - run: npm run test:integration

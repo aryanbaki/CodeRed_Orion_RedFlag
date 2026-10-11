@@ -41,22 +41,22 @@ test('valid independent Terms, Privacy and Additional results preserve trusted i
   for (const kind of ['terms','privacy','additional'] as const) {
     const d={...makeDocument(kind),id:kind};
     const result=await analyzeDocument(d,config,provider(output(kind)));
-    assert.equal(result.grade,'B'); assert.equal(result.documentId,kind); assert.equal(result.kind,kind);
+    assert.equal(result.grade,'A'); assert.equal(result.documentId,kind); assert.equal(result.kind,kind);
     assert.equal(result.coverage,'complete'); assert.equal(result.contentHash,d.contentHash);
     assert.equal(result.findings[0].sourceUrl,d.url); assert.equal(result.findings[0].startOffset,0);
     assert.equal(d.text.slice(result.findings[0].startOffset,result.findings[0].endOffset),clauses[requiredCategories(d)[0] as keyof typeof clauses][0]);
-    assert.equal(result.model,config.model); assert.equal(result.rubricVersion,'redflag.rubric.v2'); assert.equal(result.promptVersion,'redflag.prompt.v1');
+    assert.equal(result.model,config.model); assert.equal(result.rubricVersion,'redflag.rubric.v3'); assert.equal(result.promptVersion,'redflag.prompt.v2');
     assert.ok(Number.isFinite(Date.parse(result.analyzedAt))); assert.equal('documentUpdatedAt' in result,false);
     assert.equal('text' in result,false); assert.equal('text' in result.findings[0],false);
   }
 });
 test('server grades explicitly and duplicate risk quotations do not inflate penalties',()=> {
-  for (const [severity,grade] of [['low','A'],['medium','B'],['high','C']]) assert.equal(gradeOutput(output('terms',severity),document,config.model).grade,grade);
-  const raw=output(); raw.findings.push({...raw.findings[0]}); assert.equal(gradeOutput(raw,document,config.model).grade,'B');
+  for (const [severity,grade] of [['low','S'],['medium','A'],['high','B']]) assert.equal(gradeOutput(output('terms',severity),document,config.model).grade,grade);
+  const raw=output(); raw.findings.push({...raw.findings[0]}); assert.equal(gradeOutput(raw,document,config.model).grade,'A');
   const high=output('terms','high'); high.findings=high.assessments.map(a=>({category:a.category,severity:'high',quote:a.quote,explanation:'Explicit adverse provision in simulated evidence.'})); high.assessments=high.assessments.map(a=>({...a,status:'risk'}));
-  assert.equal(gradeOutput(high,document,config.model).grade,'F');
+  assert.equal(gradeOutput(high,document,config.model).grade,'E');
 });
-test('rubric v2 distinguishes the E/F boundary using independently quoted categories and preserves Unrated gates',()=> {
+test('rubric v3 distinguishes the D/E boundary using independently quoted categories and preserves Unrated gates',()=> {
   const d=makeDocument('additional');
   d.text=requiredCategories(d).map(c=>clauses[c as keyof typeof clauses].join(' ')).join(' ');
   d.contentHash=createHash('sha256').update(d.text).digest('hex');
@@ -66,9 +66,9 @@ test('rubric v2 distinguishes the E/F boundary using independently quoted catego
       assessments:categories.map((category,i)=>({category,status:i<severities.length?'risk':'protective',quote:String(clauses[category as keyof typeof clauses][i<severities.length?0:1]),explanation:'Exact explicit clause in synthetic public policy.'}))};
   }
   const edge=weighted(['high','high','medium','low']); // 100 - 80 = 20, lowest E.
-  const e=gradeOutput(edge,d,config.model);assert.equal(e.grade,'E');assert.equal(e.rubricVersion,'redflag.rubric.v2');assert.match(e.summary,/score 20\/100/);
+  const e=gradeOutput(edge,d,config.model);assert.equal(e.grade,'D');assert.equal(e.rubricVersion,'redflag.rubric.v3');
   const f=gradeOutput(weighted(['high','high','medium','low','low']),d,config.model); // 15, next reachable score below 20.
-  assert.equal(f.grade,'F');assert.match(f.summary,/score 15\/100/);
+  assert.equal(f.grade,'E');
   assert.equal(gradeOutput(edge,{...d,coverage:'partial'},config.model).grade,'Unrated');
   const missing=weighted(['high','high','medium','low']);missing.assessments[6]={...missing.assessments[6],status:'not-found',quote:null as unknown as string};
   assert.equal(gradeOutput(missing,d,config.model).grade,'Unrated');
@@ -86,9 +86,9 @@ test('malformed schema, unknown metadata, invalid severity, contradictory and mi
   const raw=output();const bads:unknown[]=[null,[],{}, {...raw,grade:'A'}, {...raw,findings:[{...raw.findings[0],severity:['medium']}]}, {...raw,assessments:raw.assessments.slice(1)}, {...raw,assessments:[raw.assessments[0],...raw.assessments.slice(0,3)]}, {...raw,assessments:raw.assessments.map(a=>({...a,status:'protective'}))}, {...raw,findings:[{...raw.findings[0],sourceUrl:'https://attacker.com'}]}];
   for (const bad of bads) {const r=await analyzeDocument(document,config,provider(bad));assert.equal(r.reason,'invalid-response');assert.equal(r.grade,'Unrated');}
 });
-test('empty and insufficient evidence remains Unrated even with claimed complete extraction',async()=> {
+test('explicit protective evidence earns S; missing evidence remains Unrated',async()=> {
   const raw=output();raw.findings=[];raw.assessments=raw.assessments.map(a=>({...a,status:'protective'}));
-  assert.equal((await analyzeDocument(document,config,provider(raw))).reason,'insufficient-evidence');
+  assert.equal((await analyzeDocument(document,config,provider(raw))).grade,'S');
   const missing=output();missing.assessments[1]={...missing.assessments[1],status:'not-found',quote:null as unknown as string};
   const result=await analyzeDocument(document,config,provider(missing));assert.equal(result.grade,'Unrated');assert.equal(result.reason,'insufficient-evidence');assert.equal(result.findings.length,1);
 });
@@ -105,7 +105,7 @@ test('prompt injection remains untrusted user data; no model metadata is accepte
     assert.equal(body.tools,undefined);assert.equal(body.store,false);assert.equal(body.generationConfig.responseJsonSchema.type,'object');
     return provider(output())(_url,init);
   };
-  assert.equal((await analyzeDocument(d,config,fake)).grade,'B');
+  assert.equal((await analyzeDocument(d,config,fake)).grade,'A');
 });
 test('missing configuration fails without a network request',async()=> {
   let calls=0;const fake:typeof fetch=async()=>{calls++;throw Error('No send');};
@@ -121,7 +121,7 @@ test('overall deadline covers stalled fetch and response-body streams',async()=>
 test('quota errors are explicit and never retried; transient retries are bounded',async()=> {
   let calls=0;
   assert.equal((await analyzeDocument(document,{...config,retries:1},async()=>{calls++;return new Response('secret upstream message',{status:429});})).reason,'quota');assert.equal(calls,1);
-  calls=0;const r=await analyzeDocument(document,{...config,retries:1},async()=>{calls++;return calls === 1 ? new Response('',{status:503}) : provider(output())('unused');});assert.equal(r.grade,'B');assert.equal(calls,2);
+  calls=0;const r=await analyzeDocument(document,{...config,retries:1},async()=>{calls++;return calls === 1 ? new Response('',{status:503}) : provider(output())('unused');});assert.equal(r.grade,'A');assert.equal(calls,2);
   calls=0;assert.equal((await analyzeDocument(document,{...config,retries:1},async()=>{calls++;return new Response('',{status:503});})).reason,'network-error');assert.equal(calls,2);
 });
 test('blocked, missing, truncated, invalid JSON and oversized provider outputs are Unrated',async()=> {
@@ -131,7 +131,7 @@ test('blocked, missing, truncated, invalid JSON and oversized provider outputs a
 });
 test('wire boundary validates exact hash, input limits, types, timestamps and public URL metadata',()=> {
   assert.deepEqual(validateRequest(request),request);
-  for (const value of [{...request,schemaVersion:2},{...request,consent:true},{...request,document:{...document,text:''}},{...request,document:{...document,text:'x'.repeat(60001)}},{...request,document:{...document,contentHash:'a'.repeat(64)}},{...request,document:{...document,kind:['terms']}},{...request,document:{...document,retrievedAt:'2026-02-30T00:00:00Z'}},{...request,document:{...document,documentUpdatedAt:'not a date'}},{...request,document:{...document,account:'secret'}}]) assert.throws(()=>validateRequest(value));
+  for (const value of [{...request,schemaVersion:2},{...request,consent:true},{...request,document:{...document,text:''}},{...request,document:{...document,text:'x'.repeat(250001)}},{...request,document:{...document,contentHash:'a'.repeat(64)}},{...request,document:{...document,kind:['terms']}},{...request,document:{...document,retrievedAt:'2026-02-30T00:00:00Z'}},{...request,document:{...document,documentUpdatedAt:'not a date'}},{...request,document:{...document,account:'secret'}}]) assert.throws(()=>validateRequest(value));
   for (const url of ['file:///tmp/terms','https://user:pass@example.com','http://127.0.0.1/terms','http://[::1]/terms','https://host.local/terms','https://example.com/?token=secret','https://example.com/#fragment']) assert.throws(()=>validateRequest({...request,document:{...document,url}}));
 });
 test('HTTP endpoint uses canonical contract and requires exact origin and demo authorization',async()=> {
@@ -140,13 +140,13 @@ test('HTTP endpoint uses canonical contract and requires exact origin and demo a
   server.listen(0,'127.0.0.1');await once(server,'listening');const url=`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/analyze`;
   const headers={Origin:config.allowedOrigin,Authorization:`Bearer ${config.token}`,'Content-Type':'application/json'};
   try {
-    const ok=await fetch(url,{method:'POST',headers,body:JSON.stringify(request)});assert.equal(ok.status,200);const body=await ok.json();assert.equal(body.schemaVersion,1);assert.equal(body.assessment.grade,'B');assert.equal(ok.headers.get('cache-control'),'no-store');
+    const ok=await fetch(url,{method:'POST',headers,body:JSON.stringify(request)});assert.equal(ok.status,200);const body=await ok.json();assert.equal(body.schemaVersion,1);assert.equal(body.assessment.grade,'A');assert.equal(ok.headers.get('cache-control'),'no-store');
     assert.equal((await fetch(url,{method:'OPTIONS',headers:{Origin:config.allowedOrigin}})).status,204);
     assert.equal((await fetch(url,{method:'POST',headers:{...headers,Origin:'https://attacker.com'},body:JSON.stringify(request)})).status,403);
     assert.equal((await fetch(url,{method:'POST',headers:{...headers,Authorization:'Bearer wrong'},body:JSON.stringify(request)})).status,401);
     assert.equal((await fetch(url,{method:'POST',headers,body:'{bad json'})).status,400);
     assert.equal((await fetch(url,{method:'POST',headers,body:JSON.stringify({...request,document:{...document,contentHash:'wrong'}})})).status,400);
-    assert.equal((await fetch(url,{method:'POST',headers,body:'x'.repeat(256001)})).status,413);
+    assert.equal((await fetch(url,{method:'POST',headers,body:'x'.repeat(2000001)})).status,413);
     assert.equal(calls,1);
     for(let i=0;i<7;i++) await fetch(url,{method:'POST',headers,body:JSON.stringify(request)});
     const limited=await fetch(url,{method:'POST',headers,body:JSON.stringify(request)});assert.equal(limited.status,429);assert.equal((await limited.json()).error.code,'quota');
@@ -160,7 +160,7 @@ test('HTTP streaming limit bounds chunked uploads and provider failures stay can
     const response=await fetch(`http://127.0.0.1:${port}/api/analyze`,{method:'POST',headers,body:JSON.stringify(request)});assert.equal(response.status,200);assert.equal((await response.json()).assessment.reason,'quota');
     await new Promise<void>((resolve,reject)=>{
       const req=httpRequest({host:'127.0.0.1',port,path:'/api/analyze',method:'POST',headers},res=>{assert.equal(res.statusCode,413);res.resume();res.on('end',resolve);});
-      req.on('error',error=>{if((error as NodeJS.ErrnoException).code === 'ECONNRESET') resolve();else reject(error);}); req.write('x'.repeat(256001)); req.end();
+      req.on('error',error=>{if((error as NodeJS.ErrnoException).code === 'ECONNRESET') resolve();else reject(error);}); req.write('x'.repeat(2000001)); req.end();
     });
   } finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
@@ -179,9 +179,56 @@ test('concurrency control rejects the third request before analysis starts',asyn
 });
 
 test('provider client/configuration and authorization failures are distinct from network failures',async()=>{
-  for(const [status,reason] of [[400,'invalid-response'],[401,'authentication-required'],[403,'authentication-required'],[404,'invalid-response']] as const) {
+  for(const [status,reason] of [[400,'invalid-response'],[401,'authentication-required'],[403,'authentication-required'],[404,'network-error']] as const) {
     const doc=makeDocument('terms');
     const result=await analyzeDocument(doc,config,async()=>new Response('{}',{status}));
     assert.equal(result.reason,reason);assert.equal(result.grade,'Unrated');
   }
+});
+
+test('approved backups handle provider failure and model unavailability with the same credential and report the actual model',async()=>{
+ const models:string[]=[],headers:string[]=[];
+ const result=await analyzeDocument(document,{...config,fallbackModels:['gemini-3.1-flash-lite','gemini-2.5-flash-lite']},async(url,options)=>{
+  models.push(String(url).split('/models/')[1].split(':')[0]);
+  headers.push((options!.headers as Record<string,string>)['x-goog-api-key']);
+  return models.length===1?new Response('',{status:503}):models.length===2?new Response('',{status:404}):provider(output())(url,options);
+ });
+ assert.deepEqual(models,[config.model,'gemini-3.1-flash-lite','gemini-2.5-flash-lite']);
+ assert.deepEqual(headers,[config.apiKey,config.apiKey,config.apiKey]);
+ assert.equal(result.model,'gemini-2.5-flash-lite');assert.equal(result.grade,'A');
+});
+test('quota can switch models; invalid evidence and authentication never trigger backup retries',async()=>{
+ let calls=0;
+ const fallback={...config,fallbackModels:['gemini-3.1-flash-lite']};
+ const quota=await analyzeDocument(document,fallback,async(url,options)=>++calls===1?new Response('',{status:429}):provider(output())(url,options));
+ assert.equal(quota.model,'gemini-3.1-flash-lite');assert.equal(quota.grade,'A');assert.equal(calls,2);
+ const bad=output();bad.findings[0].quote='This made up quotation is absent from the legal document.';
+ calls=0;const invalid=await analyzeDocument(document,fallback,async(url,options)=>{calls++;return provider(bad)(url,options);});
+ assert.equal(invalid.reason,'invalid-response');assert.equal(calls,1);
+ calls=0;const auth=await analyzeDocument(document,fallback,async()=>{calls++;return new Response('',{status:403});});
+ assert.equal(auth.reason,'authentication-required');assert.equal(calls,1);
+});
+test('a stalled primary leaves time for a backup inside the total request deadline',async()=>{
+ let calls=0;
+ const started=Date.now();
+ const result=await analyzeDocument(document,{...config,timeoutMs:200,fallbackModels:['gemini-3.1-flash-lite']},async(url,options)=>{
+  if(++calls===1)return new Promise<Response>((_resolve,reject)=>options!.signal!.addEventListener('abort',()=>reject(new Error('aborted')),{once:true}));
+  return provider(output())(url,options);
+ });
+ assert.equal(result.model,'gemini-3.1-flash-lite');assert.equal(result.grade,'A');assert.equal(calls,2);
+ assert.ok(Date.now()-started<400);
+});
+
+import {cacheIdentity,applicableCache} from '../src/background/cache.ts';
+import {validateAssessment} from '../src/background/validation.ts';
+test('fallback assessments retain actual model provenance and only configured models can be validated or reused',()=>{
+ const assessment=gradeOutput(output(),document,'gemini-3.1-flash-lite');
+ const versions={model:config.model,fallbackModels:['gemini-3.1-flash-lite'],promptVersion:assessment.promptVersion,rubricVersion:assessment.rubricVersion};
+ assert.equal(validateAssessment(assessment,document,versions).model,'gemini-3.1-flash-lite');
+ assert.throws(()=>validateAssessment(assessment,document,{...versions,fallbackModels:[]}),/invalid-response/);
+ assert.throws(()=>validateAssessment({...assessment,model:'unapproved-model'},document,versions),/invalid-response/);
+ const entry={url:document.url,kind:document.kind,contentHash:document.contentHash,expiresAt:new Date(Date.now()+10000).toISOString(),assessment};
+ assert.equal(applicableCache(entry,document,versions)?.model,'gemini-3.1-flash-lite');
+ assert.equal(applicableCache(entry,document,{...versions,fallbackModels:[]}),undefined);
+ assert.notEqual(cacheIdentity(document,versions),cacheIdentity(document,{...versions,fallbackModels:[]}));
 });

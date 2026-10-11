@@ -1,15 +1,16 @@
+import {gradeColors,isFlagGrade} from '../ui/branding.ts';
 import {summarizeReview} from '../core/summary.ts';
 import type {ReviewState} from '../core/contracts.ts';
-const colors={A:'#2d6844',B:'#467443',C:'#a67721',D:'#ba681c',E:'#b83b36',F:'#9e272d',unknown:'#64646c',pending:'#8b6737'};
+const colors={...gradeColors,unknown:gradeColors.D};
 export function toolbarPresentation(state?:ReviewState | null) {
   const s=summarizeReview(state);
-  const grade=s.worstDocumentGrade;
-  const text=s.status === 'rated' ? s.grade : grade !== 'Unrated' ? '?' : s.highConcern ? '!' : s.pending ? '…' : '?';
-  const scope=s.status === 'rated' ? 'All discovered policies graded (discovery may be incomplete)' : 'Incomplete review';
-  return {text,color:grade !== 'Unrated' ? colors[grade] : s.pending ? colors.pending : colors.unknown,
-    title:`RedFlag — ${scope}. ${s.graded}/${s.total} discovered policies graded; ${s.pending} pending. Worst supported document grade: ${grade}. Terms: ${s.termsGrade}; Privacy: ${s.privacyGrade}.${s.missingKinds.length ? ' Not discovered: '+s.missingKinds.join(',')+'.' : ''}${s.highConcern ? ' High-severity sourced concern.' : ''}`};
+  const grade=s.grade;
+  const text=isFlagGrade(grade)?grade:'';
+  const icon=`icons/redflag${isFlagGrade(grade)?`-${grade}`:''}`;
+  const source=s.source==='tosdr'?'ToS;DR community rating':s.source==='gemini'?'Gemini analysis':s.pending?'Analyzing policies':'Not enough information';
+  return {text,color:isFlagGrade(grade)?colors[grade]:colors.unknown,icon,title:`RedFlag — ${grade==='Unrated'?'Unrated':`Overall ${grade}`} · ${state?.discoveryPending?'Looking for policies':source}`};
 }
-/** Badge overlays the installed RedFlag logo; never replace base icon identity. */
+/** Per-tab flag color follows the supported overall grade; idle uses a plain red flag. */
 export class ToolbarController {
   private revisions=new Map<number,number>();
   private writes=new Map<number,Promise<void>>();
@@ -18,9 +19,13 @@ export class ToolbarController {
     const presentation=toolbarPresentation(state);
     const next=(this.writes.get(tabId) ?? Promise.resolve()).catch(()=>{}).then(async()=>{
       if (this.revisions.get(tabId) !== revision) return;
+      await chrome.action.setIcon({tabId,path:{16:`${presentation.icon}-16.png`,32:`${presentation.icon}-32.png`,48:`${presentation.icon}-48.png`,128:`${presentation.icon}-128.png`}});
+      if (this.revisions.get(tabId) !== revision) return;
       await chrome.action.setBadgeText({tabId,text:presentation.text});
       if (this.revisions.get(tabId) !== revision) return;
       await chrome.action.setBadgeBackgroundColor({tabId,color:presentation.color});
+      if (this.revisions.get(tabId) !== revision) return;
+      await chrome.action.setBadgeTextColor({tabId,color:'#ffffff'});
       if (this.revisions.get(tabId) !== revision) return;
       await chrome.action.setTitle({tabId,title:presentation.title});
     }).catch(()=>{});

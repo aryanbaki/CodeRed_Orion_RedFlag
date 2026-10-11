@@ -1,73 +1,18 @@
+// Actual unpacked popup checks; current policy actions/chat are in popup-redesign.mjs.
+import {extensionId} from '../scripts/extension-id.mjs';
 import {chromium,expect} from '@playwright/test';
-import {createHash} from 'node:crypto';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {resolve,join} from 'node:path';
-const extension=resolve('dist/extension');
-const id=createHash('sha256').update(extension).digest('hex').slice(0,32).replace(/[0-9a-f]/g,c=>String.fromCharCode(97+parseInt(c,16)));
-const profile=await mkdtemp(join(tmpdir(),'policy-review-test-'));
-let context;
-try {
-  context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
-  const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(`chrome-extension://${id}/popup.html`);
-  await expect(page.getByRole('heading',{name:'Before you agree'})).toBeVisible();
-  await page.getByText('Local source preview and fictional example',{exact:true}).click();
-  await page.getByRole('button',{name:'Try fictional example'}).click();
-  await expect(page.locator('#demo-results .card')).toHaveCount(3);
-  await expect(page.locator('#preview-status')).toContainText('Fictional example only');
-  await page.locator('#settings > summary').click();await page.getByLabel('Tracking',{exact:true}).check();
-  await expect(page.locator('#demo-results .card').first().getByRole('heading')).toHaveText('Tracking');
-  await page.reload();await page.locator('#settings > summary').click();await expect(page.getByLabel('Tracking',{exact:true})).toBeChecked();
-  await expect(page.locator('.card')).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'Enable background AI analysis',exact:true})).toBeEnabled();
-  await expect(page.locator('#ai-disclosure')).toContainText('Google Gemini');
-  await expect(page.locator('#ai-disclosure')).toContainText('Requests already sent cannot be recalled');
-  await page.getByRole('button',{name:'Enable background AI analysis',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Turn off background AI analysis',exact:true})).toBeEnabled();
-  await page.reload();await page.locator('#settings > summary').click();
-  await expect(page.getByRole('button',{name:'Turn off background AI analysis',exact:true})).toBeEnabled();
-  await page.getByRole('button',{name:'Turn off background AI analysis',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Enable background AI analysis',exact:true})).toBeEnabled();
-  const consent=await page.evaluate(async()=> (await chrome.storage.local.get('redflag.preferences.v1'))['redflag.preferences.v1'].aiConsent);
-  if (consent.enabled || consent.grantedAt) throw new Error('Consent revocation was not persisted');
-  await page.evaluate(()=>{chrome.storage.local.set=async()=>{throw new Error('Fixture storage failure');};});
-  await page.getByRole('button',{name:'Enable background AI analysis',exact:true}).click();
-  await expect(page.locator('#settings-status')).toContainText('Could not save settings');
-  await expect(page.getByRole('button',{name:'Enable background AI analysis',exact:true})).toBeEnabled();
-  await page.reload();
-  await page.getByText('Local source preview and fictional example',{exact:true}).click();
-  await page.getByRole('button',{name:'Review page text'}).click();
-  await expect(page.locator('#preview-status')).toContainText('Open an HTTP or HTTPS policy page first');
-  await page.getByRole('button',{name:'Try fictional example'}).click();
-  await page.setViewportSize({width:410,height:960});
-  await page.screenshot({path:'dist/prototype-preview.png',fullPage:false});
-  const fixturePage=await context.newPage();fixturePage.on('pageerror',e=>errors.push(e.message));
-  await fixturePage.addInitScript(()=>{
-    const state={schemaVersion:1,pageKey:'popup-fixture',pageUrl:'https://fixture.example/signup',context:'signup',updatedAt:'2026-10-11T00:00:00Z',documents:[{
-      document:{id:'terms',kind:'terms',url:'https://fixture.example/terms',label:'Synthetic Terms',discoveredAt:'2026-10-11T00:00:00Z'},
-      status:'pending',grade:'Unrated',coverage:'unknown',reason:'pending',freshness:{},community:[],cached:false,
-    }]};
-    chrome.tabs.query=async()=>[{id:99,url:'https://fixture.example/signup?private=excluded#form'}];
-    chrome.runtime.sendMessage=async()=>({ok:true,state});
-    const listeners=[];chrome.runtime.onMessage.addListener=fn=>listeners.push(fn);
-    window.dispatchFixture=(pageKey='popup-fixture',pageUrl='https://fixture.example/signup')=>listeners.forEach(fn=>fn({type:'redflag/state',state:{...state,pageKey,pageUrl,documents:[{...state.documents[0],status:'unrated',coverage:'partial',reason:'inaccessible'}]}}));
-  });
-  await fixturePage.goto(`chrome-extension://${id}/popup.html`);
-  await fixturePage.locator('#evidence > summary').click();await expect(fixturePage.locator('#results')).toContainText('Synthetic Terms');
-  await expect(fixturePage.locator('#results')).toContainText('Grade: Unrated · Pending');
-  await fixturePage.evaluate(()=>window.dispatchFixture('other-page','https://unrelated.example/signup'));
-  await expect(fixturePage.locator('#results')).toContainText('Grade: Unrated · Pending');
-  await fixturePage.evaluate(()=>window.dispatchFixture('old-generation'));
-  await expect(fixturePage.locator('#results')).toContainText('Grade: Unrated · Pending');
-  await fixturePage.evaluate(()=>window.dispatchFixture());
-  await expect(fixturePage.locator('#results')).toContainText('The document could not be accessed');
-  await fixturePage.getByText('Local source preview and fictional example',{exact:true}).click();
-  await fixturePage.getByRole('button',{name:'Try fictional example'}).click();
-  await expect(fixturePage.locator('#demo-results .card')).toHaveCount(3);
-  await expect(fixturePage.locator('#results .card')).toHaveCount(1);
-  await expect(fixturePage.locator('#results')).not.toContainText('FICTIONAL');
-  await fixturePage.close();
-  if(errors.length)throw new Error(errors.join('\n'));
-  console.log('Popup checks passed: actual unpacked extension, separated fictional demo, priorities, persistence, explicit AI opt-in, consent revocation, restricted-page error, no page exceptions.');
+const extension=resolve('dist/extension'),id=extensionId(extension),profile=await mkdtemp(join(tmpdir(),'redflag-popup-basic-'));let context;
+try{
+ context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
+ const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(`chrome-extension://${id}/popup.html`);
+ await expect(page.getByRole('heading',{name:'RedFlag',exact:true})).toBeVisible();await expect(page.locator('#onboarding')).toBeVisible();await expect(page.locator('#domain')).toHaveText('Open a website');await expect(page.locator('#chat-send')).toBeDisabled();
+ await page.locator('#start').click();await expect(page.locator('#connection-status')).toHaveText('Import your backend connection file first.');
+ await page.locator('#community-only').click();await expect(page.locator('#onboarding')).toBeHidden();await expect(page.locator('#ai-state')).toHaveText('Community ratings only');
+ const consent=await page.evaluate(async()=> (await chrome.storage.local.get('redflag.preferences.v1'))['redflag.preferences.v1'].aiConsent);if(consent.enabled||consent.grantedAt)throw Error('Community setup granted AI consent');
+ await page.locator('#settings-link').click();await page.locator('#review-enabled').uncheck();await page.reload();await expect(page.locator('#review-enabled')).not.toBeChecked();await page.locator('#settings-link').click();await page.locator('#review-enabled').check();await expect(page.locator('#settings input[type=checkbox]')).toHaveCount(1);
+ await page.locator('#setup').click();await page.evaluate(()=>{chrome.storage.local.set=async()=>{throw Error('Fixture storage failure');};});await page.locator('#community-only').click();await expect(page.locator('#action-status')).toHaveText('Setup could not be saved. Try again.');await expect(page.locator('#community-only')).toBeEnabled();
+ if(errors.length)throw Error(errors.join('; '));console.log('Unpacked popup passed: restricted-page behavior, checked onboarding, no implicit AI consent, preference persistence, minimal settings, and storage failure recovery.');
 }finally{await context?.close();await rm(profile,{recursive:true,force:true});}

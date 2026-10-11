@@ -1,3 +1,4 @@
+import {MAX_POLICY_DOWNLOAD_BYTES} from '../core/policy-text.ts';
 import {abortable, boundedText} from './io.ts';
 import {publicDocumentUrl} from '../discovery/urls.ts';
 export type RetrievalFailure = 'unsafe-url' | 'permission-denied' | 'authentication-required' | 'redirect-unverified' | 'inaccessible' | 'unsupported-content' | 'oversized' | 'incomplete' | 'timeout' | 'network-error';
@@ -22,7 +23,7 @@ export async function retrievePublicDocument(raw: string, permitted: (url: strin
     if (response.url && response.url !== url) throw new RetrievalError('redirect-unverified');
     const mime = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
     if (!['text/html','text/plain'].includes(mime ?? '')) throw new RetrievalError('unsupported-content');
-    const body = await boundedText(response,256000,signal);
+    const body = await boundedText(response,MAX_POLICY_DOWNLOAD_BYTES,signal);
     if (!body.trim()) throw new RetrievalError('incomplete');
     return {url, body, type:mime === 'text/html' ? 'html' : 'text', retrievedAt:new Date().toISOString()};
   } catch (error) {

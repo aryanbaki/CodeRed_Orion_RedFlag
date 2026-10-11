@@ -1,3 +1,4 @@
+import {extensionId} from '../scripts/extension-id.mjs';
 // Real Chromium MV3 → real local HTTP endpoint; injected output, no Google calls.
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
@@ -13,7 +14,7 @@ import type {AnalyzeRequest} from '../src/core/contracts.ts';
 const directory=await realpath(await mkdtemp(join(tmpdir(),'redflag-backend-browser-')));
 const extension=join(directory,'extension');
 const profile=join(directory,'profile');
-const id=createHash('sha256').update(extension).digest('hex').slice(0,32).replace(/[0-9a-f]/g,c=>String.fromCharCode(97+parseInt(c,16)));
+const id=extensionId(extension);
 const origin=`chrome-extension://${id}`;
 const token='simulated-demo-token-'.repeat(2);
 const config={apiKey:'simulated-only',model:'simulated-model',token,allowedOrigin:origin,port:8787};
@@ -44,7 +45,7 @@ try {
   },{endpoint,token,request});
   assert.equal(seenOrigin,origin);assert.equal(response.status,200);assert.equal(response.body.schemaVersion,1);
   assert.equal(response.body.assessment.documentId,request.document.id);assert.equal(response.body.assessment.contentHash,request.document.contentHash);
-  assert.equal(response.body.assessment.grade,'F');assert.equal(response.body.assessment.findings.length,4);
+  assert.equal(response.body.assessment.grade,'E');assert.equal(response.body.assessment.findings.length,4);
   const denied=await worker.evaluate(async ({endpoint,request})=>{
     const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request),credentials:'omit'});
     return {status:r.status,body:await r.json()};

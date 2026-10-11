@@ -5,7 +5,7 @@ export const priorityLabels: Record<RiskCategory, string> = {
   sharing:'Data sharing', retention:'Data retention', tracking:'Tracking', renewal:'Automatic renewal',
   cancellation:'Cancellation', arbitration:'Arbitration', 'content-rights':'Content rights', other:'Other concerns',
 };
-const names = {terms:'Terms', privacy:'Privacy', additional:'Additional Terms', unknown:'Other agreement'};
+const names = {terms:'Terms', privacy:'Privacy', cookies:'Cookie Policy',additional:'Additional Terms', unknown:'Other agreement'};
 const advice: Record<RiskCategory,string> = {
   sharing:'Review who receives your data and whether sharing can be limited.',
   retention:'Check deletion options and how long records remain after closing your account.',
@@ -16,10 +16,8 @@ const advice: Record<RiskCategory,string> = {
   'content-rights':'Check what rights you grant over content you upload.',
   other:'Review this clause before deciding whether to agree.',
 };
-export function usableAssessment(review: DocumentReview) {
-  const a = review.assessment;
-  return a && a.documentId === review.document.id && a.documentUrl === review.document.url && a.kind === review.document.kind ? a : undefined;
-}
+export {supportedAssessment as usableAssessment} from '../core/summary.ts';
+import {supportedAssessment as usableAssessment} from '../core/summary.ts';
 export function visibleGrade(review: DocumentReview): string {
   const a = usableAssessment(review);
   // A service rating, pending result, or partial extraction cannot imply a whole-document grade.
@@ -66,7 +64,7 @@ export function renderReview(container: HTMLElement, state: ReviewState, prefere
     }
     fragment.append(overview);
   } else fragment.append(element('p', 'No supported findings are available yet. This does not establish that the agreements are safe.', 'uncertain', doc));
-  for (const kind of ['terms','privacy','additional'] as const) {
+  for (const kind of ['terms','privacy','cookies','additional'] as const) {
     if (!state.documents.some(d=>d.document.kind === kind)) {
       fragment.append(element('p', `${names[kind]} · Unrated · Not discovered; applicability and coverage unknown.`, 'uncertain', doc));
     }

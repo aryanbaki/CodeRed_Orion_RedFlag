@@ -1,7 +1,7 @@
 import type {CommunityReference} from '../core/contracts.ts';
 import {exactDomain} from '../discovery/urls.ts';
 /** Original, strict ToS;DR adapter. No copied upstream extension/database code.
- * Accepts a licensed local catalog; no browsing-domain query is made by default. */
+ * Validates official API records and the attributed bundled snapshot. */
 export interface CommunityRecord {domains: string[]; reference: CommunityReference}
 export const COMMUNITY_CATALOG_KEY = 'redflag.community-catalog.v1';
 export function parseCommunityCatalog(raw: unknown): CommunityRecord[] {
@@ -27,7 +27,7 @@ export function parseCommunityCatalog(raw: unknown): CommunityRecord[] {
   return records;
 }
 export function lookupCommunity(hostname: string, documentUrl: string, catalog: CommunityRecord[], now = Date.now()): CommunityReference[] {
-  return catalog.filter(record => record.domains.some(domain => exactDomain(hostname,domain)))
+  return catalog.filter(record => record.domains.some(domain => exactDomain(hostname.replace(/^www\./,''),domain.replace(/^www\./,''))))
     .map(record => ({...record.reference}))
     .filter(ref => ref.scope === 'service' || ref.documentUrl === documentUrl)
     .map(ref => {
@@ -35,4 +35,20 @@ export function lookupCommunity(hostname: string, documentUrl: string, catalog: 
       else if (Date.parse(ref.reviewedAt) > now || now - Date.parse(ref.reviewedAt) > 90 * 86400000) ref.freshness = 'stale';
       return ref;
     });
+}
+
+/** Official search API. Only declared domains match; never infer ownership of tenants. */
+export function parseTosdrSearch(raw:unknown,fetchedAt=new Date().toISOString()):CommunityRecord[] {
+  if(!raw || typeof raw!=='object' || !Array.isArray((raw as {services?:unknown}).services))return [];
+  return ((raw as {services:unknown[]}).services).slice(0,100).flatMap(value=>{
+    if(!value || typeof value!=='object')return [];
+    const service=value as Record<string,unknown>;
+    if(!Number.isSafeInteger(service.id) || Number(service.id)<=0 || typeof service.name!=='string' || !Array.isArray(service.urls))return [];
+    const domains=service.urls.slice(0,100).flatMap(url=>{
+      if(typeof url!=='string')return [];
+      try{const domain=new URL(url.includes('://')?url:'https://'+url).hostname;return exactDomain(domain,domain)?[domain]:[];}catch{return [];}
+    });
+    if(!domains.length)return [];
+    return parseCommunityCatalog([{domains,reference:{provider:'tosdr',serviceId:String(service.id),serviceName:service.name,sourceUrl:`https://tosdr.org/en/service/${service.id}`,rating:typeof service.rating==='string'?service.rating:undefined,scope:'service',reviewStatus:service.is_comprehensively_reviewed===true?'reviewed':'unreviewed',recordUpdatedAt:service.updated_at,fetchedAt,freshness:'unknown',attribution:'ToS;DR — https://tosdr.org, CC BY-SA 3.0'}}]);
+  });
 }

@@ -31,7 +31,7 @@ test('retrieval permission, redirect, auth, partial, MIME and size failures stay
   for (const [status,reason] of [[301,'redirect-unverified'],[401,'authentication-required'],[403,'authentication-required'],[404,'inaccessible'],[206,'incomplete']] as const) {
     await assert.rejects(retrievePublicDocument(url,async () => true,async () => new Response('body',{status,headers:{'content-type':'text/plain'}})),e => e instanceof RetrievalError && e.reason === reason);
   }
-  for (const response of [new Response('pdf',{headers:{'content-type':'application/pdf'}}),new Response('x'.repeat(256001),{headers:{'content-type':'text/plain'}}),new Response('',{headers:{'content-type':'text/plain'}})]) await assert.rejects(retrievePublicDocument(url,async () => true,async () => response));
+  for (const response of [new Response('pdf',{headers:{'content-type':'application/pdf'}}),new Response('x'.repeat(2000001),{headers:{'content-type':'text/plain'}}),new Response('',{headers:{'content-type':'text/plain'}})]) await assert.rejects(retrievePublicDocument(url,async () => true,async () => response));
   await assert.rejects(retrievePublicDocument(url,async () => true,async () => {throw new DOMException('timeout','TimeoutError');}),e => e instanceof RetrievalError && e.reason === 'timeout');
   await assert.rejects(retrievePublicDocument(url,async () => true,async () => {throw new TypeError('offline');}),e => e instanceof RetrievalError && e.reason === 'network-error');
 });

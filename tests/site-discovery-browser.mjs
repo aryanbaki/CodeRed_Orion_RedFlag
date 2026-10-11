@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';import {join,resolve} from 'node:path';import ass
 const root=await mkdtemp(join(tmpdir(),'redflag-site-discovery-'));let context;
 try {
  const extension=join(root,'extension');await cp(resolve('dist/extension'),extension,{recursive:true});
- const manifest=JSON.parse(await readFile(join(extension,'manifest.json'),'utf8'));manifest.host_permissions=['https://service.com/*'];await writeFile(join(extension,'manifest.json'),JSON.stringify(manifest));
+ const manifest=JSON.parse(await readFile(join(extension,'manifest.json'),'utf8'));manifest.host_permissions=['https://service.com/*'];manifest.optional_host_permissions=['https://*/*'];await writeFile(join(extension,'manifest.json'),JSON.stringify(manifest));
  // Only optional-permission approval/events are fixtures; actual script injection remains browser-enforced.
  const permissionHarness=`globalThis.fixtureGrants=[];globalThis.fixtureAdded=[];globalThis.fixtureRemoved=[];
  const realGet=chrome.permissions.getAll.bind(chrome.permissions),realContains=chrome.permissions.contains.bind(chrome.permissions);
@@ -16,7 +16,7 @@ try {
  const background=join(extension,'background.js');await writeFile(background,permissionHarness+await readFile(background,'utf8'));
  context=await chromium.launchPersistentContext(join(root,'profile'),{channel:'chromium',headless:true,args:['--enable-unsafe-extension-debugging',`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
  const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
- await worker.evaluate(()=>{globalThis.requests=[];globalThis.fetch=async(url,init)=>{requests.push({url:String(url),credentials:init?.credentials,body:init?.body});return new Response('This synthetic public policy describes retention of information for a specific service purpose.',{headers:{'content-type':'text/plain'}});};});
+ await worker.evaluate(()=>{globalThis.requests=[];const nativeFetch=globalThis.fetch;globalThis.fetch=async(url,init)=>{if(!String(url).startsWith('https:')&&!String(url).startsWith('http:'))return nativeFetch(url,init);requests.push({url:String(url),credentials:init?.credentials,body:init?.body});return new Response('This synthetic public policy describes retention of information for a specific service purpose.',{headers:{'content-type':'text/plain'}});};});
  await expect.poll(()=>worker.evaluate(async()=> (await chrome.scripting.getRegisteredContentScripts()).length)).toBe(1);
  const controls=await context.newPage();await controls.goto(`chrome-extension://${id}/popup.html`);
  const ordinary='<main><h1>Repository</h1>'+Array.from({length:650},(_,i)=>`<a href="/issues/${i}">Issue ${i}</a>`).join('')+'</main><footer><a href="/terms">Terms</a><a href="https://documents.org/privacy">Privacy</a><a href="/blog/privacy">Privacy</a><a href="/settings/privacy">Privacy</a></footer>';
@@ -26,7 +26,7 @@ try {
  const tabId=await controls.evaluate(async()=> (await chrome.tabs.query({url:'https://service.com/repository'}))[0].id);
  const get=()=>controls.evaluate(async tabId=>(await chrome.storage.session.get('redflag.jobs.v1'))['redflag.jobs.v1'].sessions[tabId]?.state,tabId);
  await expect.poll(async()=> (await get())?.documents.length).toBe(2);
- await expect.poll(async()=> (await get()).documents.every(d=>d.status!=='pending')).toBe(true);
+ await expect.poll(async()=> !(await get()).discoveryPending && (await get()).documents.every(d=>d.status!=='pending')).toBe(true);
  assert.equal((await get()).context,'browsing');assert.equal((await get()).documents.find(d=>d.document.kind==='privacy').reason,'permission-required');
  await expect(page.locator('[data-redflag-ui]')).toHaveCount(0);
  assert.equal(await worker.evaluate(()=>requests.filter(r=>r.body).length),0);
@@ -47,9 +47,9 @@ try {
  await page.locator('#text-context').evaluate(e=>e.remove());await expect.poll(async()=> (await get()).context).toBe('browsing');
  // A granted new navigation is automatic without clicking the action again.
  await page.goto('https://service.com/next');await expect.poll(async()=> (await get())?.pageUrl).toBe('https://service.com/next');assert.notEqual((await get()).pageKey,key);
- await expect.poll(async()=> (await get()).documents.every(d=>d.status!=='pending')).toBe(true);
+ await expect.poll(async()=> !(await get()).discoveryPending && (await get()).documents.every(d=>d.status!=='pending')).toBe(true);
  const rechecked=await controls.evaluate(async tabId=>{const state=(await chrome.storage.session.get('redflag.jobs.v1'))['redflag.jobs.v1'].sessions[tabId].state;return chrome.runtime.sendMessage({type:'redflag/analyze',mode:'recheck',pageKey:state.pageKey,tabId});},tabId);assert.equal(rechecked.ok,true);
- await expect.poll(async()=> (await get()).documents.every(d=>d.status!=='pending')).toBe(true);assert.equal(await worker.evaluate(()=>requests.filter(r=>r.body).length),0);
+ await expect.poll(async()=> !(await get()).discoveryPending && (await get()).documents.every(d=>d.status!=='pending')).toBe(true);assert.equal(await worker.evaluate(()=>requests.filter(r=>r.body).length),0);
  // Browser action invocation supplies actual temporary activeTab access, no host grant.
  const ungranted=await context.newPage();await ungranted.goto('https://ungranted.org/repo');await ungranted.bringToFront();
  const browserCdp=await context.browser().newBrowserCDPSession();const {targetInfos}=await browserCdp.send('Target.getTargets',{filter:[{type:'tab',exclude:false},{exclude:true}]});const target=targetInfos.find(t=>t.url===ungranted.url());assert.ok(target);await browserCdp.send('Extensions.triggerAction',{id,targetId:target.targetId});

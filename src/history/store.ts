@@ -29,6 +29,7 @@ export function createHistoryApi(storage:HistoryStorage,lock:<T>(task:()=>Promis
       if(options.requireExisting && !previous) return;
       if(previous && previous.lastCheckedAt>site.lastCheckedAt) return;
       if(previous) site.firstCheckedAt=previous.firstCheckedAt;
+      site.visitCount=(previous?.visitCount??(previous?1:0))+(previous?.generation===site.generation?0:1);
       data.sites=data.sites.filter(s=>s.origin!==site.origin);data.sites.push(site);
       // Keep tombstones for other generations so late updates cannot resurrect deleted history.
       await write(data);

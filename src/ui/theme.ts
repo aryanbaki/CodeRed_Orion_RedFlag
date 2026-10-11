@@ -1,23 +1,37 @@
-/** Shared dark visual tokens. Monoglyphic is NOT installed or licensed in this build. */
-export const TEMPORARY_FONT_STACK = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+import {gradeColors,gradeVisualCss} from './branding.ts';
+import {APP_FONT_STACK,ensureAppFont} from './font.ts';
+/** Shared visual tokens and the user-supplied application font. */
 export const themeCss = `
 :root,:host {
   color-scheme:dark;
-  --rf-background:#121416;
-  --rf-surface:#1b1e22;
-  --rf-surface-raised:#24282e;
-  --rf-border:#424850;
-  --rf-text:#f4f5f7;
-  --rf-muted:#b5bac3;
-  --rf-red:#ff334f;
-  --rf-red-contrast:#140407;
-  --rf-warning:#ffce85;
-  --rf-green:#9ce8ba;
-  --rf-focus:#ffce85;
-  --rf-font:${TEMPORARY_FONT_STACK};
+  --rf-background:#101623;
+  --rf-surface:#192234;
+  --rf-surface-raised:#202d43;
+  --rf-border:#34435d;
+  --rf-text:#edf2fa;
+  --rf-muted:#a6b3c9;
+  --rf-red:#b8a7ff;
+  --rf-red-contrast:#211839;
+  --rf-warning:#d8bf97;
+  --rf-green:#b8d3e7;
+  --rf-focus:#d8bf97;
+  --rf-heading:#ffffff;
+  --rf-metadata:#8399b8;
+  /* Glossy flag grading palette supplied by the user. */
+  --rf-grade-s:${gradeColors.S};
+  --rf-grade-a:${gradeColors.A};
+  --rf-grade-b:${gradeColors.B};
+  --rf-grade-c:${gradeColors.C};
+  --rf-grade-d:${gradeColors.D};
+  --rf-grade-e:${gradeColors.E};
+  --rf-font:${APP_FONT_STACK};
 }
+${gradeVisualCss}
+button,input,textarea,select,option {font-family:var(--rf-font)}
+input::file-selector-button {font:inherit}
 `;
 export function applyTheme(doc:Document = document): void {
+  void ensureAppFont(doc).catch(()=>{});
   if (doc.getElementById('redflag-theme')) return;
   const style=doc.createElement('style'); style.id='redflag-theme';style.textContent=themeCss;doc.head.append(style);
 }

@@ -1,3 +1,4 @@
+import {policyWordCount} from '../core/policy-text.ts';
 import type {AnalysisDocument, DocumentReview, RedFlagPreferences, UnratedReason} from '../core/contracts.ts';
 import {CACHE_TTL_MS, applicableCache, cacheIdentity, contentHash, type AnalysisVersions, type CacheEntry} from './cache.ts';
 import {lookupCommunity, type CommunityRecord} from './community.ts';
@@ -26,7 +27,7 @@ export function failureReason(error: unknown): UnratedReason {
 /** Each job processes exactly one independently scoped agreement. */
 export async function processDocument(review:DocumentReview, pageHost:string, deps:ProcessorDependencies, publish:(review:DocumentReview)=>Promise<void>): Promise<void> {
   const next:DocumentReview = structuredClone(review);
-  delete next.assessment; delete next.failure; next.cached=false;next.freshness={};
+  delete next.wordCount; delete next.assessment; delete next.failure; next.cached=false;next.freshness={};
   let stage: 'retrieval' | 'analysis' = 'retrieval';
   try {
     next.community = lookupCommunity(pageHost,next.document.url,await deps.catalog());
@@ -36,6 +37,7 @@ export async function processDocument(review:DocumentReview, pageHost:string, de
     const extraction = await deps.extract(download);
     next.coverage = extraction.coverage;
     if (extraction.reason || !extraction.text) throw new Error(extraction.reason ?? 'incomplete');
+    next.wordCount = policyWordCount(extraction.text);
     const doc:AnalysisDocument = {id:next.document.id,url:download.url,kind:next.document.kind,text:extraction.text,coverage:extraction.coverage,retrievedAt:download.retrievedAt,contentHash:await contentHash(extraction.text)};
     stage='analysis';
     const versions = await deps.versions();

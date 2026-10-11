@@ -1,10 +1,18 @@
+import {BACKEND_KEY,parseBackend,checkBackend,type Backend} from '../background/backend.ts';
+import {requestPolicyChat} from '../background/chat.ts';
+import {validChatInput,type ChatCommand,type ChatResponse} from '../core/chat-contracts.ts';
+import {contentHash} from '../background/cache.ts';
+import {MAX_POLICY_CHARACTERS} from '../core/policy-text.ts';
 import {abortable, boundedText} from '../background/io.ts';
 import {CONTRACT_VERSION, PREFERENCES_STORAGE_KEY, createDefaultPreferences, type ReviewState, type RedFlagPreferences, type DiscoveredDocument, type ConsentContext, type AnalysisDocument} from '../core/contracts.ts';
 import {pendingState, safePageUrl, validateDiscovery, validPreferences, permitsAi} from '../background/validation.ts';
 import {retrievePublicDocument, type Download} from '../background/retrieval.ts';
 import {processDocument} from '../background/processor.ts';
 import {CACHE_KEY, type CacheEntry, type AnalysisVersions} from '../background/cache.ts';
-import {COMMUNITY_CATALOG_KEY, parseCommunityCatalog} from '../background/community.ts';
+import {COMMUNITY_CATALOG_KEY, parseCommunityCatalog, parseTosdrSearch, lookupCommunity} from '../background/community.ts';
+import {GEMINI_BACKUP_MODELS,validFallbackModels} from '../core/model-routing.ts';
+import {findCommonPolicies} from '../background/common-policies.ts';
+import {seedServices,seedFetchedAt} from '../background/community-seed.ts';
 import type {Extraction} from '../background/extraction.ts';
 import {publicDocumentUrl} from '../discovery/urls.ts';
 import {ToolbarController} from '../background/toolbar.ts';
@@ -18,11 +26,9 @@ const navigationEpoch=new Map<number,number>();
 const manualAccess=new Map<number,{pageUrl:string;documentId?:string}>();
 const scans=new Map<number,Promise<ScanCurrentResponse>>();
 const SESSION_KEY = 'redflag.jobs.v1';
-const BACKEND_KEY = 'redflag.backend.v1';
 interface Job {tabId:number;pageKey:string;documentId:string;attempts:number;bypassCache?:boolean}
 interface Session {browserDocumentId?:string;state:ReviewState;historyOrigin?:string}
 interface Snapshot {sessions:Record<string,Session>;jobs:Job[];cooldowns?:Record<string,number>}
-interface Backend extends AnalysisVersions {baseUrl:string;accessToken:string}
 let snapshot:Snapshot = {sessions:{},jobs:[]};
 let running = 0;
 const inFlight = new Set<string>();
@@ -33,17 +39,7 @@ async function preferences():Promise<RedFlagPreferences> {
   return validPreferences(raw) ? raw : createDefaultPreferences(new Date().toISOString());
 }
 async function backend():Promise<Backend | undefined> {
-  const raw = (await chrome.storage.local.get(BACKEND_KEY))[BACKEND_KEY] as Backend | undefined;
-  if (!raw || ![raw.model,raw.promptVersion,raw.rubricVersion,raw.accessToken,raw.baseUrl].every(v => typeof v === 'string' && v.length > 0 && v.length <= 500)) return;
-  try {
-    const url = new URL(raw.baseUrl);
-    // Production transport must use a public HTTPS destination. localhost demo
-    // is an explicitly configured exception for backend transport, never retrieval.
-    if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') publicDocumentUrl(raw.baseUrl);
-    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost','127.0.0.1'].includes(url.hostname))) return;
-    if (url.username || url.password || url.search || url.hash) return;
-    return raw;
-  } catch { return; }
+ return parseBackend((await chrome.storage.local.get(BACKEND_KEY))[BACKEND_KEY]);
 }
 function persist():Promise<void> {
   const value = structuredClone(snapshot);
@@ -56,13 +52,43 @@ const initialized = (async () => {
   const stored = (await chrome.storage.session.get(SESSION_KEY))[SESSION_KEY] as Snapshot | undefined;
   if (stored?.sessions && Array.isArray(stored.jobs)) snapshot = stored;
 })();
+const commonRequests=new Map<string,Promise<DiscoveredDocument[]>>();
+const communityRequests=new Map<string,Promise<import('../core/contracts.ts').CommunityReference[]>>();
+const communityAttempts=new Map<string,number>();
+async function communityFor(host:string) {
+  host=host.replace(/^www\./,'');
+  const stored=parseCommunityCatalog((await chrome.storage.local.get(COMMUNITY_CATALOG_KEY))[COMMUNITY_CATALOG_KEY]);
+  const seeds=parseTosdrSearch(seedServices,seedFetchedAt);
+  const refs=lookupCommunity(host,'',stored.concat(seeds));
+  if(refs.some(r=>Date.now()-Date.parse(r.fetchedAt)<86400000) || Date.now()-(communityAttempts.get(host)??0)<3600000)return refs;
+  let request=communityRequests.get(host);
+  if(!request){
+    communityAttempts.set(host,Date.now());
+    request=(async()=>{
+      try{
+        const response=await fetch('https://api.tosdr.org/search/v5?query='+encodeURIComponent(host),{credentials:'omit',redirect:'error',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(8000)});
+        if(!response.ok)throw Error('community unavailable');
+        const records=parseTosdrSearch(JSON.parse(await boundedText(response,256000,AbortSignal.timeout(8000))));
+        const matched=records.filter(r=>r.domains.some(d=>d.replace(/^www\./,'')===host));
+        writes=writes.catch(()=>{}).then(async()=>{
+          const latest=parseCommunityCatalog((await chrome.storage.local.get(COMMUNITY_CATALOG_KEY))[COMMUNITY_CATALOG_KEY]);
+          await chrome.storage.local.set({[COMMUNITY_CATALOG_KEY]:latest.filter(r=>!r.domains.some(d=>d.replace(/^www\./,'')===host)).concat(matched).slice(-500)});
+        });await writes;
+        return lookupCommunity(host,'',matched);
+      }catch{return refs;}
+    })();
+    communityRequests.set(host,request);
+    void request.finally(()=>communityRequests.delete(host));
+  }
+  return request;
+}
 async function extract(download:Download):Promise<Extraction> {
   creatingOffscreen ??= (async () => {
     if (!await chrome.offscreen.hasDocument()) await chrome.offscreen.createDocument({url:'offscreen.html',reasons:[chrome.offscreen.Reason.DOM_PARSER],justification:'Extract public legal documents in a detached DOM without opening policy tabs.'});
   })().finally(() => {creatingOffscreen = undefined;});
   await creatingOffscreen;
   const result = await abortable(chrome.runtime.sendMessage({type:'redflag/internal-extract',body:download.body,format:download.type}),AbortSignal.timeout(5000)) as Extraction;
-  if (!result || typeof result.text !== 'string' || result.text.length > 60000 || !['complete','partial'].includes(result.coverage)) throw new Error('invalid-response');
+  if (!result || typeof result.text !== 'string' || result.text.length > MAX_POLICY_CHARACTERS || !['complete','partial'].includes(result.coverage)) throw new Error('invalid-response');
   return result;
 }
 async function permitted(url:string) {return chrome.permissions.contains({origins:[new URL(url).origin + '/*']});}
@@ -121,7 +147,7 @@ async function publish(tabId:number,pageKey:string) {
     const saved=await getHistory(session.historyOrigin).catch(()=>undefined);
     if (!saved || saved.generation !== pageKey) return;
   }
-  if (published.documents.length) await recordReview(published,{requireExisting:!!session.historyOrigin}).catch(()=>{});
+  if (published.documents.length || published.community?.length) await recordReview(published,{requireExisting:!!session.historyOrigin}).catch(()=>{});
   if (snapshot.sessions[tabId]?.state.pageKey !== pageKey) return;
   if (tabId>=0) await toolbar.update(tabId,published);
   const options:chrome.tabs.MessageSendOptions = session.browserDocumentId ? {documentId:session.browserDocumentId} : {frameId:0};
@@ -153,7 +179,7 @@ async function pump() {
         if(savedSession?.historyOrigin && !(await getHistory(savedSession.historyOrigin).catch(()=>undefined))) return {...prefs,enabled:false};
         return snapshot.sessions[job.tabId]?.state.pageKey === job.pageKey && snapshot.sessions[job.tabId]?.state.documents.some(d => d.document.id === job.documentId) ? prefs : {...prefs,enabled:false}; },download,extract,
       versions:backend,analyze:doc=>analyze(doc,()=>snapshot.sessions[job.tabId]?.state.pageKey===job.pageKey && snapshot.sessions[job.tabId]?.state.documents.some(d=>d.document.id===job.documentId)===true),bypassCache:job.bypassCache,
-      catalog:async () => parseCommunityCatalog((await chrome.storage.local.get(COMMUNITY_CATALOG_KEY))[COMMUNITY_CATALOG_KEY]),
+      catalog:async () => parseCommunityCatalog((await chrome.storage.local.get(COMMUNITY_CATALOG_KEY))[COMMUNITY_CATALOG_KEY]).concat(parseTosdrSearch(seedServices,seedFetchedAt)),
       cacheGet:async key => ((await chrome.storage.local.get(CACHE_KEY))[CACHE_KEY] as Record<string,CacheEntry> | undefined)?.[key],
       cachePut:async (cacheKey,entry) => {
         // Cache mutations share the serialization queue with session writes.
@@ -185,8 +211,35 @@ async function discover(tabId:number,browserDocumentId:string | undefined,pageUr
     snapshot.sessions[tabId] = {browserDocumentId,state:pendingState(crypto.randomUUID(),pageUrl,context,[])};
   }
   const session = snapshot.sessions[tabId];
+  const generation=session.state.pageKey;
+  void communityFor(new URL(pageUrl).hostname).then(async refs=>{
+    const active=snapshot.sessions[tabId];
+    if(!active || active.state.pageKey!==generation)return;
+    active.state.community=refs;
+    for(const review of active.state.documents)review.community=refs;
+    await publish(tabId,generation);
+  });
+  session.state.discoveryPending=true;
+  const origin=new URL(pageUrl).origin;
+  let common=commonRequests.get(origin);
+  if(!common){
+    common=findCommonPolicies(origin,documents,url=>retrievePublicDocument(url,permitted,fetch,4000));
+    commonRequests.set(origin,common);
+    setTimeout(()=>commonRequests.delete(origin),3600000);
+  }
+  void common.then(async found=>{
+    const active=snapshot.sessions[tabId];
+    if(!active || active.state.pageKey!==generation)return;
+    active.state.discoveryPending=false;
+    for(const document of found){
+      if(active.state.documents.some(d=>d.document.url===document.url && d.document.kind===document.kind) || active.state.documents.length>=24)continue;
+      active.state.documents.push(...pendingState(generation,pageUrl,context,[document]).documents);
+      snapshot.jobs.push({tabId,pageKey:generation,documentId:document.id,attempts:0});
+    }
+    await publish(tabId,generation);void pump();
+  });
   session.state.context=context;
-  session.state.documents = session.state.documents.filter(review => documents.some(d => d.url === review.document.url && d.kind === review.document.kind));
+  session.state.documents = session.state.documents.filter(review => review.document.id.startsWith('common-') || documents.some(d => d.url === review.document.url && d.kind === review.document.kind));
   snapshot.jobs = snapshot.jobs.filter(job => job.pageKey !== session.state.pageKey || session.state.documents.some(d => d.document.id === job.documentId));
   for (const document of documents) {
     if (session.state.documents.some(d => d.document.url === document.url && d.document.kind === document.kind)) continue;
@@ -281,12 +334,59 @@ async function analysisAction(message:AnalysisCommand,sender:chrome.runtime.Mess
   await publish(tabId!,session.state.pageKey);setTimeout(()=>void pump(),0);
   return {ok:true,state:structuredClone(session.state),queuedDocumentIds,joinedDocumentIds};
 }
+const chatRequests=new Set<number>();
+async function chatAction(command:ChatCommand,sender:chrome.runtime.MessageSender):Promise<ChatResponse>{
+ const reject=(code:string,error:string):ChatResponse=>({ok:false,schemaVersion:1,pageKey:typeof command.pageKey==='string'?command.pageKey:'',code,error});
+ if(!trustedUi(sender)||!validChatInput(command))return reject('invalid-command','Choose a question about the current site.');
+ if(!permitsAi(await preferences()))return reject('ai-consent-required','Complete Gemini setup first.');
+ const [tab]=await chrome.tabs.query({active:true,currentWindow:true}),session=tab?.id!==undefined?snapshot.sessions[tab.id]:undefined;
+ if(!session||command.pageKey!==session.state.pageKey||!tab?.url||safePageUrl(tab.url)!==session.state.pageUrl)return reject('stale-page','The website changed. Reopen RedFlag.');
+ const current=async()=>{
+  const active=(await chrome.tabs.query({active:true,currentWindow:true}))[0];
+  return active?.id===tab.id&&snapshot.sessions[tab.id!]?.state.pageKey===command.pageKey&&!!active.url&&safePageUrl(active.url)===session.state.pageUrl&&permitsAi(await preferences());
+ };
+ if(chatRequests.has(tab.id!))return reject('pending','An answer is already in progress.');
+ const config=await backend();if(!config)return reject('backend-required','Connect Gemini in setup.');
+ const selected=session.state.documents.filter(d=>['privacy','terms','cookies','additional'].includes(d.document.kind)).filter((d,i,all)=>all.findIndex(v=>v.document.url===d.document.url)===i);
+ if(!selected.length)return reject('no-policy','No policies found yet. Try Analyze all.');
+ if(selected.length>6)return reject('too-large','This site has too many linked policies for one chat.');
+ chatRequests.add(tab.id!);
+ const controller=new AbortController();controllers.add(controller);const timer=setTimeout(()=>controller.abort(),45000);
+ try{
+  const documents:AnalysisDocument[]=[];
+  for(const review of selected){
+   if(!await current())return reject('stale-page','The site or consent changed.');
+   const retrieved=await abortable(download(review.document.url),controller.signal),extracted=await abortable(extract(retrieved),controller.signal);
+   if(!extracted.text.trim())throw Error('A policy could not be read. Try Analyze all again.');
+   documents.push({id:review.document.id,url:review.document.url,kind:review.document.kind,text:extracted.text,coverage:extracted.coverage,retrievedAt:retrieved.retrievedAt,contentHash:await contentHash(extracted.text)});
+  }
+  if(!await current())return reject('stale-page','The site or consent changed.');
+  const answer=await requestPolicyChat(command,documents,config,controller.signal);
+  if(!await current())return reject('stale-page','The site or consent changed.');
+  return {ok:true,...answer};
+ }catch(error){return reject(controller.signal.aborted?'timeout':'unavailable',controller.signal.aborted?'Chat stopped or timed out. Try again.':error instanceof Error&&error.message.length<=150?error.message:'The policies could not be read. Try again.');}
+ finally{clearTimeout(timer);controllers.delete(controller);chatRequests.delete(tab.id!);}
+}
+async function connectionAction(message:{type:string;config?:unknown},sender:chrome.runtime.MessageSender){
+ if(!trustedUi(sender))return {ok:false,connected:false,error:'Trusted setup required.'};
+ const config=message.type==='redflag/connect-backend'?parseBackend(message.config):await backend();
+ if(!config)return {ok:false,connected:false,error:'Import your RedFlag connection file.'};
+ try{
+  if(!await permitted(config.baseUrl))throw Error('Allow browser access to the backend.');
+  await checkBackend(config);
+  if(message.type==='redflag/connect-backend')await chrome.storage.local.set({[BACKEND_KEY]:config});
+  return {ok:true,connected:true,model:config.model};
+ }catch(error){return {ok:false,connected:false,error:error instanceof Error&&error.message.length<=150?error.message:'Start the RedFlag backend, then reconnect.'};}
+}
 chrome.runtime.onMessage.addListener((message,sender,reply) => {
   if (sender.id !== chrome.runtime.id || !message || typeof message !== 'object') return;
   if (message.type === 'redflag/internal-extract' || message.type === 'redflag/state') return;
   void (async () => {
     await initialized;
     switch (message.type) {
+      case 'redflag/chat': return chatAction(message,sender);
+      case 'redflag/backend-status':
+      case 'redflag/connect-backend': return connectionAction(message,sender);
       case 'redflag/analyze':
       case 'redflag/recheck-site': return analysisAction(message,sender);
       case 'redflag/scan-current': return scanCurrent(message,sender);

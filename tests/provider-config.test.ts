@@ -17,3 +17,12 @@ test('missing selected key never falls back to a paid/default key; unsupported p
   const active=readProviderConfig({...keys,AI_PROVIDER:'gemini',GEMINI_PROFILE:'free',OPENAI_API_KEY:'inactive-key',ANTHROPIC_API_KEY:'inactive-key',CUSTOM_API_KEY:'inactive-key'});
   assert.equal(active.provider,'gemini');assert.equal(active.profile,'free');assert.equal(Object.values(active).includes('inactive-key'),false);
 });
+test('user-approved backups preserve the selected key, allow disabling, and reject malformed lists',()=>{
+ const selected=readProviderConfig({...keys,GEMINI_PROFILE:'free',GEMINI_MODEL:'gemini-3.5-flash'});
+ assert.deepEqual(selected.fallbackModels,['gemini-3.1-flash-lite','gemini-2.5-flash-lite']);
+ assert.equal(selected.apiKey,keys.GEMINI_FREE_API_KEY);
+ assert.deepEqual(readProviderConfig({...keys,GEMINI_FALLBACK_MODELS:''}).fallbackModels,[]);
+ for(const GEMINI_FALLBACK_MODELS of ['invalid/model','one,two,three','same,same']){
+  assert.throws(()=>readProviderConfig({...keys,GEMINI_FALLBACK_MODELS}),/configuration/);
+ }
+});

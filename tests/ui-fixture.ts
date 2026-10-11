@@ -26,6 +26,7 @@ Object.assign(window,{
       contains:async({origins}:{origins:string[]})=>origins.every(v=>grants.has(v)),
       request:async({origins}:{origins:string[]})=>{permissionCalls.push(origins);origins.forEach(v=>grants.add(v));return true;},
       remove:async({origins}:{origins:string[]})=>{origins.forEach(v=>grants.delete(v));return true;},
+      getAll:async()=>({origins:[...grants]}),
     }},configurable:true});
     const section=element('section');section.setAttribute('aria-label','Site access fixture');
     const access=element('div');const status=element('p');status.setAttribute('role','status');section.append(status,access);document.body.prepend(section);
@@ -34,6 +35,7 @@ Object.assign(window,{
 
   fixtureUpdate:()=>controller.update({...state,documents:[terms,{...privacy,status:'unrated',coverage:'partial',reason:'inaccessible'},additional]},preferences),
   fixtureReady:()=>controller.update({...state,documents:[terms,{...privacy,status:'ready',grade:'B',coverage:'complete',assessment:{...terms.assessment!,documentId:'privacy',documentUrl:privacy.document.url,kind:'privacy',grade:'B',summary:'Synthetic independent Privacy assessment.',findings:[]}},additional]},preferences),
+  fixtureAllReady:()=>{const readyTerms={...terms,cached:false,freshness:{},assessment:{...terms.assessment!,rubricVersion:'redflag.rubric.v3',contentHash:'a'.repeat(64)}};controller.update({...state,documents:[readyTerms,{...privacy,status:'ready',grade:'B',coverage:'complete',community:[],assessment:{...readyTerms.assessment!,documentId:'privacy',documentUrl:privacy.document.url,kind:'privacy',grade:'B',findings:[]}}]},preferences);},
   fixtureMissing:()=>controller.update({...state,documents:[terms]},preferences),
   fixtureInvalidGrade:()=>controller.update({...state,documents:[{...terms,coverage:'partial'},privacy]},preferences),
   fixtureUnsafe:()=>controller.update({...state,documents:[{...terms,document:{...terms.document,url:'javascript:alert(1)',label:'<img src=x onerror=alert(1)>'},assessment:undefined},privacy]},preferences),

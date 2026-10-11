@@ -1,8 +1,8 @@
 import {publicDocumentUrl} from './urls.ts';
-export type LegalKind = 'terms' | 'privacy' | 'additional';
+export type LegalKind = 'terms' | 'privacy' | 'cookies' | 'additional';
 export interface DiscoveredLink {url: string; kind: LegalKind; label: string; element?: HTMLAnchorElement; consent?:boolean}
-const legal = /\b(additional\s*terms|terms\s*(?:of\s*(?:service|use)|(?:and|&)\s*conditions)|privacy\s*polic(?:y|ies))\b/i;
-const shortLegal = /^(terms|privacy)$/i;
+const legal = /\b(cookie\s*polic(?:y|ies)|additional\s*terms|terms\s*(?:of\s*(?:service|use)|(?:and|&)\s*conditions)|privacy\s*polic(?:y|ies))\b/i;
+const shortLegal = /^(terms|privacy|cookies)$/i;
 const agreement = /\b(sign\s*up|register|create\s*(?:an?\s*)?account|checkout|onboarding|consent|agree|accept|by\s*(?:continuing|proceeding)|get\s*started)\b/i;
 const explicitAgreement = /\b((?:i|you|we)\s+(?:agree|accept)|by\s*(?:continuing|proceeding|signing\s*up)|agree\s+to|accept\s+(?:the|these|our)\s+(?:terms|privacy)|consent\s+to)\b/i;
 function staticText(element: Element): string {
@@ -41,8 +41,8 @@ export function discoverLegalLinks(root: ParentNode, base: string, deduplicate =
       const url = publicDocumentUrl(link.getAttribute('href')!, base);
       const label = match[0];
       if(shortLegal.test(label) && (/\/(?:blog|articles?|settings|issues|pull|discussions)(?:\/|$)/i.test(new URL(url).pathname) ||
-        !/\/(?:site-policy|policies|legal|privacy(?:-policy)?|terms(?:-of-(?:service|use))?)(?:\/|$)/i.test(new URL(url).pathname))) continue;
-      const kind = /privacy/i.test(label) ? 'privacy' : /additional/i.test(label) ? 'additional' : 'terms';
+        !/\/(?:site-policy|policies|legal|cookies?(?:-policy)?|privacy(?:-policy)?|terms(?:-of-(?:service|use))?)(?:\/|$)/i.test(new URL(url).pathname))) continue;
+      const kind = /cookie/i.test(label) ? 'cookies' : /privacy/i.test(label) ? 'privacy' : /additional/i.test(label) ? 'additional' : 'terms';
       // A shared URL with distinct scopes is still two agreements.
       const key=deduplicate ? kind + ':' + url : String(results.size);
       const consent=inContext(link) || results.get(key)?.consent === true;

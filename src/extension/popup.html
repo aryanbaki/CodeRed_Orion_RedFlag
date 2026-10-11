@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Policy review</title><link rel="stylesheet" href="popup.css"></head>
+<body><main>
+<p class="eyebrow">RESEARCH PROTOTYPE · 0.1</p><h1>Before you agree.</h1>
+<p>Start with the source. Review the policy and the privacy concerns that matter to you.</p>
+<fieldset><legend>Your priorities <span>saved on this device</span></legend>
+<label><input type="checkbox" value="sharing"> Data sharing</label><label><input type="checkbox" value="retention"> Data retention</label><label><input type="checkbox" value="tracking"> Tracking</label></fieldset>
+<div class="actions"><button id="capture">Review page text</button><button id="demo" class="secondary">Try fictional example</button></div>
+<p class="note">Page review reads selected text, or the main page text if nothing is selected. Nothing is sent off this device. AI and community data are not connected yet.</p>
+<p id="status" role="status" aria-live="polite">Open a policy page to begin.</p>
+<section id="results" aria-label="Review results"></section>
+<details id="preview" hidden><summary>Captured source text</summary><pre id="text"></pre></details>
+</main><script type="module" src="popup.js"></script></body></html>

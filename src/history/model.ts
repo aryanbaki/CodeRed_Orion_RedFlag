@@ -70,7 +70,7 @@ function documentReview(raw:unknown,index:number):DocumentReview | undefined {
     community:Array.isArray(r.community)?r.community.slice(0,4).map(community).filter((v):v is CommunityReference=>!!v):[],assessment:a,cached:r.cached===true};
 }
 export function snapshotReview(raw:ReviewState):CheckedSite {
-  if(raw.schemaVersion!==CONTRACT_VERSION || !['signup','checkout','onboarding','consent'].includes(raw.context) || !Array.isArray(raw.documents) || !raw.documents.length || !date(raw.updatedAt)) throw new Error('Only checked-site reviews can be saved.');
+  if(raw.schemaVersion!==CONTRACT_VERSION || !['signup','checkout','onboarding','consent','browsing'].includes(raw.context) || !Array.isArray(raw.documents) || !raw.documents.length || !date(raw.updatedAt)) throw new Error('Only checked-site reviews can be saved.');
   const origin=checkedOrigin(raw.pageUrl),documents=raw.documents.slice(0,24).map(documentReview).filter((v):v is DocumentReview=>!!v);
   if(!documents.length) throw new Error('No supported review documents to save.');
   const at=date(raw.updatedAt)!;

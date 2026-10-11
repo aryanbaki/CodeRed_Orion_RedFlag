@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Policy Review \u2014 Research Prototype",
-  "version": "0.1.0",
+  "name": "RedFlag",
+  "version": "0.2.0",
   "description": "Research framework for sourced policy explanations and personal privacy reminders.",
   "permissions": [
     "activeTab",

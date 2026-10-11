@@ -23,7 +23,7 @@ export function validateDiscovery(raw: unknown, senderUrl: string): {pageUrl:str
   if (!raw || typeof raw !== 'object') throw new Error('Invalid discovery');
   const value = raw as Record<string,unknown>;
   if (typeof value.pageUrl !== 'string' || safePageUrl(value.pageUrl) !== safePageUrl(senderUrl) ||
-    !['signup','checkout','onboarding','consent'].includes(value.context as string) || !Array.isArray(value.documents) || value.documents.length > 24) throw new Error('Invalid discovery');
+    !['signup','checkout','onboarding','consent','browsing'].includes(value.context as string) || !Array.isArray(value.documents) || value.documents.length > 24) throw new Error('Invalid discovery');
   const seen = new Set<string>();
   const documents = value.documents.map((item: unknown) => {
     if (!item || typeof item !== 'object') throw new Error('Invalid document');

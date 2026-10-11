@@ -1,4 +1,6 @@
 import {CONTRACT_VERSION, type ReviewState, type DocumentReview, type DocumentAssessment, type CommunityReference, type RiskCategory, type UnratedReason} from '../core/contracts.ts';
+import {reviewFailure} from '../background/failures.ts';
+import {supportedDocumentGrade} from '../core/summary.ts';
 import {publicDocumentUrl} from '../discovery/urls.ts';
 export const HISTORY_STORAGE_KEY='redflag.history.v1';
 export const HISTORY_VERSION=1 as const;
@@ -58,11 +60,12 @@ function documentReview(raw:unknown,index:number):DocumentReview | undefined {
   const document={id:text(d.id,100)||`document-${index}`,url:url??'',kind:d.kind,label:({terms:'Terms of Service',privacy:'Privacy Policy',additional:'Additional Terms',unknown:'Other agreement'})[d.kind],discoveredAt:date(d.discoveredAt)!};
   const a=url?assessment(r.assessment,document):undefined;
   const coverage=['complete','partial','unknown'].includes(r.coverage)?r.coverage:'unknown';
-  const grade=r.status==='ready' && coverage==='complete' && a?.coverage==='complete' && a.grade===r.grade && a.provider==='gemini' ? r.grade : 'Unrated';
+  const grade=supportedDocumentGrade({...r,document,assessment:a,coverage});
   const status=grade!=='Unrated'?'ready':r.status==='pending' && url?'pending':'unrated';
   const freshness=r.freshness??{};
   return {document,status,grade,coverage,reason:!url?'unsafe-url':status==='pending'?'pending':grade==='Unrated'?(reasons.includes(r.reason!)?r.reason:a?.reason??'insufficient-evidence'):undefined,
     freshness:{retrievedAt:date(freshness.retrievedAt),documentUpdatedAt:date(freshness.documentUpdatedAt),analyzedAt:date(freshness.analyzedAt),cacheExpiresAt:date(freshness.cacheExpiresAt)},
+    ...(r.failure && ['retrieval','analysis'].includes(r.failure.stage) && reasons.includes(r.failure.code)?{failure:reviewFailure(r.failure.stage,r.failure.code,r.failure.retryAfterSeconds)}:{}),
     community:Array.isArray(r.community)?r.community.slice(0,4).map(community).filter((v):v is CommunityReference=>!!v):[],assessment:a,cached:r.cached===true};
 }
 export function snapshotReview(raw:ReviewState):CheckedSite {

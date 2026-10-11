@@ -15,12 +15,18 @@ export function createHistoryApi(storage:HistoryStorage,lock:<T>(task:()=>Promis
   }
   async function write(data:HistoryData) {try {await storage.set({[HISTORY_STORAGE_KEY]:pruneHistory(data,now())});}catch{throw new HistoryError('Local history could not be saved. Existing saved reviews are unchanged.');}}
   return {
-    list:async():Promise<CheckedSite[]> => structuredClone((await read()).sites),
+    list:():Promise<CheckedSite[]> => lock(async()=>{
+      const data=await read();
+      const raw=(await storage.get(HISTORY_STORAGE_KEY))[HISTORY_STORAGE_KEY];
+      if(raw!==undefined && JSON.stringify(raw)!==JSON.stringify(data)) await write(data);
+      return structuredClone(data.sites);
+    }),
     get:async(origin:string):Promise<CheckedSite | undefined> => structuredClone((await read()).sites.find(s=>s.origin===checkedOrigin(origin))),
-    recordReview:(state:ReviewState):Promise<void> => lock(async()=>{
+    recordReview:(state:ReviewState,options:{requireExisting?:boolean}={}):Promise<void> => lock(async()=>{
       const site=snapshotReview(state),data=await read();
       if(data.deleted.some(d=>d.origin===site.origin && d.generation===site.generation)) return;
       const previous=data.sites.find(s=>s.origin===site.origin);
+      if(options.requireExisting && !previous) return;
       if(previous && previous.lastCheckedAt>site.lastCheckedAt) return;
       if(previous) site.firstCheckedAt=previous.firstCheckedAt;
       data.sites=data.sites.filter(s=>s.origin!==site.origin);data.sites.push(site);
@@ -47,7 +53,7 @@ export function historyApi() {
   return api;
 }
 // Stable worker/popup integration surface; no review capture or analysis lives here.
-export const recordReview=(state:ReviewState)=>historyApi().recordReview(state);
+export const recordReview=(state:ReviewState,options?:{requireExisting?:boolean})=>historyApi().recordReview(state,options);
 export const listHistory=()=>historyApi().list();
 export const getHistory=(origin:string)=>historyApi().get(origin);
 export const deleteHistory=(origin:string)=>historyApi().remove(origin);

@@ -1,5 +1,5 @@
 import type {CheckedSite} from '../history/model.ts';
-import {visibleGrade} from './review.ts';
+import {supportedDocumentGrade} from '../core/summary.ts';
 import {element} from './dom.ts';
 export type RecentItem=CheckedSite;
 /** Small trusted-UI component. Caller owns loading/errors and history subscription. */
@@ -10,7 +10,7 @@ export function mountRecentItems(container:HTMLElement,items:RecentItem[],onOpen
     for(const site of next.slice(0,5)) {
       const button=element('button',undefined,'recent-item',doc);button.type='button';
       button.append(element('span',new URL(site.origin).hostname,'recent-host',doc));
-      const grades=site.documents.map(r=>`${r.document.kind}: ${r.status==='pending'?'Pending':visibleGrade(r)}`).join(' · ');
+      const grades=site.documents.map(r=>`${r.document.kind}: ${r.status==='pending'?'Pending':supportedDocumentGrade(r)}`).join(' · ');
       button.append(element('span',grades,'recent-grades',doc));
       button.setAttribute('aria-label',`Open saved review for ${new URL(site.origin).hostname}`);
       button.addEventListener('click',()=>onOpen(site.origin));fragment.append(button);

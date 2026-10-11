@@ -4,21 +4,22 @@
 
 RedFlag is a Manifest V3 Chrome extension that discovers public privacy, cookie, and terms policies, combines attributed ToS;DR community ratings with Google Gemini analysis, and explains concerns using exact passages from the source documents.
 
-**Current version:** 0.3.7 · **Status:** local developer extension with a local Gemini backend. No public backend is deployed.
+**Current version:** 1.0.0 · **Status:** local developer extension with a local Gemini backend. No public backend is deployed.
 
-## Version 0.3.7
+## Version 1.0.0
 
 The popup, onboarding and saved reviews use cream backgrounds, brown text and red-orange actions. Grade badges and summary bars preserve the reference colors. The website appears once in the grade card; cards and tabs have simpler borders and spacing.
 
-Onboarding includes visible step progress, optional interests, keyboard custom-interest entry, back navigation, connection retry and community-only setup. Failed saves stay visible, and consent and completion are saved together. My sites and Settings are reachable from the popup footer after setup.
+The welcome is a short, optional introduction. Discovery and the review remain available while it is open; dismissing or reopening it changes only its completion marker. AI consent is a separate explicit choice, and existing enable/disable settings and interests stay unchanged. My sites and Settings remain available from the popup footer.
 
-Analyze all preserves discovery errors and disables repeat clicks while starting or running. Policy cards show pending and failure reasons; detail panels explain permission, backend, timeout and rate-limit errors. See [0.3.7 verification](docs/site-review-0.3.7.md) for the packaged onboarding and Analyze tests and the bounded live Gemini check.
+Analyze all discovers policies before requesting AI access and refreshes every discovered document independently, including policies found during a running batch. Previously discovered policies remain in the current page review if their links disappear. Failure messages stay visible with retry guidance. A horizontal S–E legend explains each grade at the bottom of a review. The duplicate Quick Read block has been removed; sourced protections, grade details, red flags, policy summaries and Chat remain.
+
+See the [team and AI handoff](docs/TEAM_HANDOFF.md) for ownership, integration rules and verification steps. Release verification is recorded in [1.0.0 checks](docs/site-review-1.0.0.md).
 
 ## What you can do
 
 - **Review policies at a glance.** See an overall grade, separate Privacy, Cookies, and Terms cards, and retrieved word counts. Use **Analyze all** or a policy’s **Analyze** button to refresh a review.
 - **Read the evidence.** Red flags include source quotations and links. Summary brings together supported risks and protections; Chat answers questions with policy citations.
-- **Choose your focus.** Optional interests bring relevant findings first without changing their grades.
 - **Use community ratings.** ToS;DR ratings are attributed to the service being reviewed. They do not become invented scores for individual policies.
 - **Keep a local review history.** My sites stores checked reviews on your device. The device vault supports deletion, clearing, and credential-free export.
 
@@ -53,7 +54,7 @@ This checks TypeScript, runs the unit tests, and builds the extension in `dist/e
 2. Enable **Developer mode**.
 3. Choose **Load unpacked** and select `dist/extension`.
 4. Open a regular website and select the RedFlag toolbar icon.
-5. Complete first-use setup. Choose community ratings only to use RedFlag without a Gemini backend.
+5. The review starts automatically. Dismiss the optional introduction whenever you like. Community ratings and policy discovery work without a Gemini backend.
 
 After rebuilding, click **Reload** on RedFlag’s extension card. Its manifest key keeps the extension ID stable when the unpacked folder moves.
 
@@ -79,7 +80,7 @@ Save it as `REDFLAG_DEMO_TOKEN` in `.env`, then start the backend:
 npm run start:server
 ```
 
-The backend listens on `127.0.0.1:8787` and derives the allowed extension origin from the manifest. RedFlag pairs automatically with the running local backend. Open its popup, retry the connection if needed, and choose **Enable checks** after reviewing the notice.
+The backend listens on `127.0.0.1:8787` and derives the allowed extension origin from the manifest. RedFlag pairs automatically with the running local backend. Press **Analyze all** or an individual **Analyze** button, retry the connection if needed, and choose **Enable checks** after reviewing the notice. The requested action then resumes.
 
 For manual connection, use **Advanced connection** to import the generated `~/Downloads/RedFlag-Local-Connection.json` file. Keep the backend running while using AI analysis and Chat.
 
@@ -87,7 +88,7 @@ For manual connection, use **Advanced connection** to import the generated `~/Do
 
 ## Privacy and data handling
 
-Installation requests access to HTTP/HTTPS sites so RedFlag can discover public policy links and retrieve their documents. AI analysis requires affirmative consent, which can be changed or revoked through **Review setup**.
+Installation requests access to HTTP/HTTPS sites so RedFlag can discover public policy links and retrieve their documents. AI analysis requires affirmative consent, which can be changed or revoked through the AI analysis checkbox in **Settings**.
 
 - Google provider keys stay on the backend. The extension receives a separate local access token.
 - Consented Gemini analysis sends retrieved public policy text to Google. ToS;DR lookup sends the site domain.
@@ -145,6 +146,7 @@ Version 0.3.7 passed TypeScript, all **77 unit tests**, the production build, on
 
 ## Documentation
 
+- [Team and AI handoff](docs/TEAM_HANDOFF.md)
 - [Gemini backend setup](docs/gemini-backend.md)
 - [Architecture and data boundaries](docs/architecture.md)
 - [Discovery and background behavior](docs/discovery-background.md)

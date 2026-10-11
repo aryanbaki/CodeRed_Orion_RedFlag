@@ -34,6 +34,17 @@ test('re-check discards prior assessment, bypasses cache and validates new exact
  await processDocument(review(),'service.com',deps({bypassCache:true,cacheGet:async()=>{throw new Error('Cache must be bypassed');},analyze:async()=>{calls++;return {...review().assessment,findings:[{...review().assessment!.findings[0],quote:'Invented new evidence'}]};}}),async r=>{latest=r;});
  assert.equal(calls,1);assert.equal(latest.grade,'Unrated');assert.equal(latest.reason,'invalid-response');assert.equal(latest.assessment,undefined);
 });
+test('a joined re-check upgrades an in-progress cache read to fresh analysis',async()=>{
+ let bypassCache=false,calls=0,latest=review();
+ const dependencies=deps({cacheGet:async()=>{
+  // The trusted re-check can arrive while storage is retrieving the entry.
+  bypassCache=true;
+  return {url:review().document.url,kind:'terms',contentHash:hash,expiresAt:new Date(Date.now()+60000).toISOString(),assessment:review().assessment!};
+ },analyze:async()=>{calls++;return review().assessment;}});
+ Object.defineProperty(dependencies,'bypassCache',{get:()=>bypassCache});
+ await processDocument(review(),'service.com',dependencies,async updated=>{latest=updated;});
+ assert.equal(calls,1);assert.equal(latest.cached,false);assert.equal(latest.grade,'E');
+});
 test('source authentication and backend authentication are distinct and successful retry clears failures',async()=>{
  let latest=review();
  await processDocument(review(),'service.com',deps({analyze:async()=>{throw new AnalysisFailure('authentication-required');}}),async r=>{latest=r;});

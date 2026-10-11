@@ -2,24 +2,21 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RedFlag</title><link rel="stylesheet" href="popup.css"></head>
 <body><main>
 <header class="brand"><img class="brand-logo" src="icons/redflag-128.png" alt="" width="40" height="40"><div><h1>RedFlag</h1></div></header>
-<section id="onboarding" aria-label="Set up RedFlag" hidden>
-<ol class="setup-progress" aria-label="Setup progress"><li id="progress-interests" aria-current="step"><span>1</span>Your focus</li><li id="progress-consent"><span>2</span>Policy checks</li></ol>
-<div id="interest-step">
-<p class="eyebrow">MAKE IT YOURS · 1 OF 2</p><h2 id="interest-title" tabindex="-1">What matters to you?</h2><p>Pick any interests, or skip this step. Matching findings come first; grades stay consistent.</p>
-<div id="interest-choices"></div>
-<label class="custom-label" for="custom-interest">Add your own interest <span class="optional">(optional)</span></label>
-<div class="custom-interest-row"><input id="custom-interest" maxlength="80" placeholder="e.g. AI training"><button id="add-interest" class="secondary" type="button">Add</button></div>
-<div id="custom-interests"></div><p id="interest-status" role="status"></p>
-<div class="setup-actions"><button id="onboarding-next" type="button">Continue</button><button id="skip-interests" class="secondary" type="button">Skip for now</button></div>
+<section id="onboarding" aria-label="Welcome and AI checks" hidden>
+<div id="welcome-step">
+<p class="eyebrow">WELCOME TO REDFLAG</p><h2 id="welcome-title" tabindex="-1">Know what you’re agreeing to.</h2><p>Open RedFlag on a website. It finds public policies automatically and keeps your review in one place.</p>
+<ul class="setup-benefits"><li>See privacy, cookie and terms grades.</li><li>Explore sourced red flags and policy details.</li><li>Ask questions about the policies in Chat.</li></ul>
+<p class="welcome-note">This introduction leaves your settings and reviews unchanged.</p>
+<div class="setup-actions"><button id="onboarding-next" type="button">Got it</button><button id="skip-interests" class="secondary" type="button">Skip introduction</button></div>
 </div>
 <div id="consent-step" hidden>
-<p class="eyebrow">PUBLIC POLICY CHECKS · 2 OF 2</p><h2 id="consent-title" tabindex="-1">Read less. Know more.</h2><p>Get clear grades and sourced explanations before you agree.</p>
+<p class="eyebrow">AI POLICY CHECKS</p><h2 id="consent-title" tabindex="-1">Read less. Know more.</h2><p>Get clear grades and sourced explanations before you agree.</p>
 <ul class="setup-benefits"><li>Gemini reads public policy text.</li><li>ToS;DR receives the website domain.</li><li>Your form entries and account data stay out.</li></ul>
 <div class="connection-panel"><h3>Local connection</h3><p id="connection-status" class="note" role="status" aria-live="polite">Connecting…</p><p class="connection-help">AI checks need the RedFlag backend running on this device.</p><button id="retry-connection" class="text-button" type="button">Retry connection</button></div>
-<div class="setup-actions stacked"><button id="start" type="button">Enable checks</button><button id="community-only" class="secondary" type="button">Use community ratings</button></div>
+<div class="setup-actions stacked"><button id="start" type="button">Enable checks</button><button id="community-only" class="secondary" type="button">Keep browsing</button></div>
 <p class="setup-note">You can change this later in Settings.</p>
 <details class="advanced-connection"><summary>Use another backend</summary><button id="connect" class="secondary" type="button">Import connection file</button><input id="connection-file" type="file" accept="application/json,.json" hidden></details>
-<button id="onboarding-back" class="text-button" type="button">← Back to interests</button>
+<button id="onboarding-back" class="text-button" type="button">← About RedFlag</button>
 </div>
 <p id="onboarding-status" role="alert" aria-live="polite"></p>
 </section>
@@ -30,4 +27,10 @@
 <section id="panel-chat" role="tabpanel" aria-labelledby="tab-chat" hidden><p id="chat-model" class="meta">Ask about this site’s policies</p><div id="chat-messages" aria-live="polite"></div><form id="chat-form"><label for="chat-input" class="sr-only">Ask about this site’s policies</label><textarea id="chat-input" maxlength="2000" rows="2" placeholder="Ask about this site…"></textarea><button id="chat-send" type="submit" aria-label="Send question">↑</button></form><p id="chat-status" role="status" aria-live="polite"></p></section>
 <section class="sites-section" hidden aria-labelledby="recent-heading"><h2 id="recent-heading">My sites</h2><div id="recent-items"></div><button id="open-summary" class="secondary">All sites ↗</button></section>
 <nav class="popup-footer" aria-label="RedFlag pages"><a href="dashboard.html#sites" target="_blank" rel="noopener">My sites</a><a href="dashboard.html#settings" target="_blank" rel="noopener">Settings</a></nav>
+<section id="grade-guide" aria-labelledby="grade-guide-title" hidden>
+<h2 id="grade-guide-title">What do the grades mean?</h2>
+<p>Green means fewer supported concerns. Yellow, orange and red mean increasing concern.</p>
+<ol id="grade-scale" aria-label="Grades from S, lowest concern, to E, highest concern"></ol>
+<p class="grade-guide-note"><strong>? · Unrated</strong> — not enough complete, verified evidence for a grade. Read each policy’s findings for the details.</p>
+</section>
 </main><script type="module" src="popup.js"></script></body></html>

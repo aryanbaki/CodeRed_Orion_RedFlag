@@ -45,7 +45,7 @@ export async function processDocument(review:DocumentReview, pageHost:string, de
       const key = cacheIdentity(doc,versions);
       const entry = deps.bypassCache ? undefined : await deps.cacheGet(key);
       const cached = applicableCache(entry,doc,versions);
-      if (cached) {
+      if (cached && !deps.bypassCache) {
         // Cache is never trusted without validating its quotes against today's download.
         try {
           next.assessment = validateAssessment(cached,doc,versions);

@@ -1,7 +1,8 @@
-import {CUSTOM_INTERESTS_KEY,interestChoices,normalizeCustomInterests,prioritizeFindings} from '../core/interests.ts';
+import {CUSTOM_INTERESTS_KEY,normalizeCustomInterests,prioritizeFindings} from '../core/interests.ts';
 import {summarizeReview} from '../core/summary.ts';
 import {requestCurrentScan} from '../core/discovery-actions.ts';
 import {requestAnalysis} from '../core/analysis-actions.ts';
+import {gradeMeanings} from '../ui/branding.ts';
 import {applyTheme} from '../ui/theme.ts';
 import {renderPopupReview} from '../ui/popup-review.ts';
 import {siteInsights} from '../core/site-insights.ts';
@@ -13,8 +14,8 @@ import type {ChatTurn,ChatResponse} from '../core/chat-contracts.ts';
 import {changeConsent,loadPreferences,normalizePreferences} from '../ui/preferences.ts';
 applyTheme();
 const get=<T extends HTMLElement=HTMLElement>(id:string)=>document.querySelector<T>('#'+id)!;
-let preferences:Awaited<ReturnType<typeof loadPreferences>>,state:ReviewState|null=null,pageUrl:string|null=null,busy=false,connected=false,siteName='This site',chatBusy=false,chatGeneration=0,analyzeAllBusy=false,setupBusy=false,interestBusy=false,connectionBusy=false;
-let customInterests:string[]=[],chosenInterests=new Set<import('../core/contracts.ts').RiskCategory>();
+let preferences:Awaited<ReturnType<typeof loadPreferences>>,state:ReviewState|null=null,pageUrl:string|null=null,busy=false,connected=false,siteName='This site',chatBusy=false,chatGeneration=0,analyzeAllBusy=false,setupBusy=false,connectionBusy=false;
+let customInterests:string[]=[],pendingAction:(()=>Promise<void>)|null=null,connectionCheck:Promise<void>|null=null;
 let chatHistory:ChatTurn[]=[],selectedTab='flags',analysisStarted=false;
 const busyIds=new Set<string>(),onboardingKey='redflag.onboarding.v1';
 const recent=mountRecentItems(get('recent-items'),[],origin=>void chrome.tabs.create({url:chrome.runtime.getURL('dashboard.html')+'#site='+encodeURIComponent(origin)}));
@@ -43,11 +44,6 @@ function paintInsights(){
  if(!findings.length&&(!issue||insights.pending))flags.append(element('p',insights.pending?'Reading policies…':insights.summaries.length?'No supported red flags in the text reviewed.':'Analyze policies to see what matters.','empty-state'));
  if(!insights.summaries.length){summary.append(element('p',insights.pending?'Reading policies…':issue||'Your overview will appear after analysis.','empty-state'));return;}
  if(issue&&!insights.pending)summary.append(element('p',issue,'empty-state'));
- const overview=element('article',undefined,'summary-overview');overview.append(element('p','THE QUICK READ','eyebrow'),element('h2','What these policies mean'));
- const positive=insights.protections[0]?.explanation,negative=findings[0]?.explanation;
- overview.append(element('p',[positive,negative].filter(Boolean).join(' ')||'The reviewed text does not provide enough supported evidence to describe the main benefits or risks.','summary-prose'));
- const kinds=new Set(insights.summaries.map(s=>s.label)),partial=insights.summaries.some(s=>s.partial);
- overview.append(element('p',`${kinds.size} policy ${kinds.size===1?'type':'types'} reviewed${partial?' · Some text is incomplete':''}.`,'summary-coverage'));summary.append(overview);
  summary.append(element('h3','On your side','summary-section-title'));
  if(insights.protections.length)for(const p of insights.protections.slice(0,3))summary.append(citedCard(p,true));
  else summary.append(element('p','No positive clauses could be confirmed in the reviewed text.','summary-neutral'));
@@ -64,26 +60,22 @@ function paintInsights(){
  for(const s of insights.summaries){notes.append(element('h3',s.label+(s.partial?' · Partial':'')),element('p',s.text));}summary.append(notes);
 }
 
-function paintInterests(){
- const choices=get('interest-choices');choices.replaceChildren();
- for(const choice of interestChoices){const button=element('button',choice.label,'interest-choice');button.type='button';button.dataset.category=choice.category;button.setAttribute('aria-pressed',String(chosenInterests.has(choice.category)));button.append(element('span',choice.detail));button.addEventListener('click',()=>{chosenInterests.has(choice.category)?chosenInterests.delete(choice.category):chosenInterests.add(choice.category);paintInterests();});choices.append(button);}
- const chips=get('custom-interests');chips.replaceChildren();for(const label of customInterests){const button=element('button',label+' ×','custom-chip');button.setAttribute('aria-label','Remove interest '+label);button.addEventListener('click',()=>{customInterests=customInterests.filter(v=>v!==label);paintInterests();});chips.append(button);}
-}
-async function saveInterests(skip=false){
- if(interestBusy)return;interestBusy=true;get<HTMLButtonElement>('onboarding-next').disabled=true;get<HTMLButtonElement>('skip-interests').disabled=true;get('interest-status').textContent='';
- try{await navigator.locks.request('redflag-preferences-v1',async()=>{const latest=await loadPreferences(),next={...latest,priorities:skip?[]:[...chosenInterests]};await chrome.storage.local.set({[PREFERENCES_STORAGE_KEY]:next,[CUSTOM_INTERESTS_KEY]:skip?[]:customInterests});preferences=next;});if(skip){chosenInterests.clear();customInterests=[];paintInterests();}get('interest-step').hidden=true;get('consent-step').hidden=false;paint();get('consent-title').focus();}
- catch{get('interest-status').textContent='Could not save your choices. Try again.';}
- finally{interestBusy=false;get<HTMLButtonElement>('onboarding-next').disabled=false;get<HTMLButtonElement>('skip-interests').disabled=false;}
+async function dismissWelcome(){
+ if(setupBusy)return;
+ setupBusy=true;get('onboarding-status').textContent='';
+ try{await chrome.storage.local.set({[onboardingKey]:true});get('onboarding').hidden=true;pendingAction=null;}
+ catch{get('onboarding-status').textContent='Could not close the introduction. Try again.';}
+ finally{setupBusy=false;paint();}
 }
 
 function paint(){
  if(!preferences)return;
  const scanning=busy||Boolean(state?.discoveryPending);
- const onInterests=!get('interest-step').hidden;get(onInterests?'progress-interests':'progress-consent').setAttribute('aria-current','step');get(onInterests?'progress-consent':'progress-interests').removeAttribute('aria-current');
  get('connection-status').dataset.state=connectionBusy?'pending':connected?'connected':'unavailable';
  const noPolicies=Boolean(pageUrl&&state&&!scanning&&!state.documents.length&&summarizeReview(state).source==='unknown');
  get('no-policies').hidden=!noPolicies;get<HTMLButtonElement>('find-policies').disabled=scanning||!preferences.enabled;
  const showInsights=!noPolicies&&(analysisStarted||summarizeReview(state).grade!=='Unrated');
+ get('grade-guide').hidden=!showInsights;
  get('tab-flags').parentElement!.hidden=!showInsights;
  for(const tab of tabs)get('panel-'+tab).hidden=!showInsights||tab!==selectedTab;
  get('loading').hidden=!scanning;get('compact-review').hidden=!pageUrl||noPolicies;
@@ -92,8 +84,8 @@ function paint(){
  get<HTMLTextAreaElement>('chat-input').disabled=chatBusy||!pageUrl||!preferences.enabled;
  paintInsights();
 }
-function showSetup(message?:string){get('onboarding-status').textContent='';get('onboarding').hidden=false;get('interest-step').hidden=true;get('consent-step').hidden=false;if(message)get('connection-status').textContent=message;paint();get('consent-title').focus();get('onboarding').scrollIntoView({block:'start'});}
-function canAnalyze(){if(!preferences.aiConsent.enabled||!connected){showSetup(!connected?'Start the RedFlag backend, then retry.':'Enable checks to continue.');return false;}return true;}
+function showSetup(message?:string){get('onboarding-status').textContent='';get('onboarding').hidden=false;get('welcome-step').hidden=true;get('consent-step').hidden=false;if(message)get('connection-status').textContent=message;paint();get('consent-title').focus();get('onboarding').scrollIntoView({block:'start'});}
+function canAnalyze(resume:()=>Promise<void>){if(!preferences.enabled){get('action-status').textContent='Enable RedFlag in Settings to analyze policies.';return false;}if(!preferences.aiConsent.enabled||!connected){pendingAction=resume;showSetup(!connected?'Start the RedFlag backend, then retry.':'Enable checks to continue.');return false;}return true;}
 async function scan(){
  if(!pageUrl||busy||!preferences.enabled)return false;
  busy=true;get('action-status').textContent='';paint();
@@ -101,7 +93,9 @@ async function scan(){
  catch{get('action-status').textContent='Could not check this site.';return false;}finally{busy=false;paint();}
 }
 async function analyzePolicy(documentId:string){
- if(!state||busyIds.has(documentId)||!canAnalyze())return;
+ if(!state||busyIds.has(documentId))return;
+ if(preferences.aiConsent.enabled&&!connected)await checkConnection();
+ if(busyIds.has(documentId)||!canAnalyze(()=>analyzePolicy(documentId)))return;
  const pageKey=state.pageKey;analysisStarted=true;busyIds.add(documentId);get('action-status').textContent='';paint();
  try{const result=await requestAnalysis({type:'redflag/analyze',mode:'one',pageKey,documentId});if(result.ok&&state?.pageKey===pageKey)acceptState(result.state);else if(!result.ok)get('action-status').textContent=result.error;}
  catch{get('action-status').textContent='Could not start analysis. Try again.';}finally{busyIds.delete(documentId);paint();}
@@ -112,13 +106,19 @@ async function analyzeAll(){
  try{
   // Discover public policies before requiring AI consent or a connected Gemini backend.
   if(!await scan())return;
-  if(!state?.documents.length){get('action-status').textContent=state?.discoveryPending?'Still looking for policies…':'No public policies found.';return;}
-  if(!canAnalyze())return;
-  const pageKey=state.pageKey;
+  if(!state?.documents.length&&!state?.discoveryPending){get('action-status').textContent='No public policies found.';return;}
+  if(!state?.documents.length&&!preferences.aiConsent.enabled){get('action-status').textContent='Still looking for policies…';return;}
+  if(preferences.aiConsent.enabled&&!connected)await checkConnection();
+  if(!canAnalyze(analyzeAll))return;
+  const pageKey=state!.pageKey;
   const result=await requestAnalysis({type:'redflag/analyze',mode:'recheck',pageKey});
   if(result.ok&&state?.pageKey===pageKey)acceptState(result.state);else if(!result.ok)get('action-status').textContent=result.error;
  }catch{get('action-status').textContent='Could not start analysis. Try again.';}
  finally{analyzeAllBusy=false;paint();}
+}
+for(const [grade,meaning] of gradeMeanings){
+ const item=element('li'),badge=element('span',grade,'document-grade');badge.dataset.grade=grade;
+ item.append(badge,element('span',meaning,'grade-meaning'));get('grade-scale').append(item);
 }
 const tabs=['flags','summary','chat'];
 function selectTab(name:string){selectedTab=name;for(const tab of tabs){get<HTMLButtonElement>('tab-'+tab).setAttribute('aria-selected',String(tab===name));get('tab-'+tab).tabIndex=tab===name?0:-1;get('panel-'+tab).hidden=tab!==name;}}
@@ -131,8 +131,10 @@ function chatBubble(role:ChatTurn['role'],text:string,response?:Extract<ChatResp
 get('chat-form').addEventListener('submit',event=>{event.preventDefault();void sendChat();});
 get('chat-input').addEventListener('keydown',event=>{const e=event as KeyboardEvent;if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();void sendChat();}});
 async function sendChat(){
- if(chatBusy||!canAnalyze())return;
+ if(chatBusy)return;
  const question=get<HTMLTextAreaElement>('chat-input').value.trim();if(!question||question.length>2000)return;
+ if(preferences.aiConsent.enabled&&!connected)await checkConnection();
+ if(chatBusy||!canAnalyze(sendChat))return;
  if(!state){get('chat-status').textContent='Find policies with Analyze all first.';return;}
  const generation=chatGeneration,pageKey=state.pageKey;chatBusy=true;chatBubble('user',question);get('chat-status').textContent='Reading policies…';paint();
  try{
@@ -145,11 +147,8 @@ async function sendChat(){
  finally{if(generation===chatGeneration){chatBusy=false;paint();}}
 }
 get('find-policies').addEventListener('click',()=>void (async()=>{if(busy)return;busy=true;get('action-status').textContent='';paint();try{const result=await chrome.runtime.sendMessage({type:'redflag/rescan-policies'});if(result?.ok)acceptState(result.state);else get('action-status').textContent=result?.error??'Could not check this site.';}catch{get('action-status').textContent='Could not check this site. Try again.';}finally{busy=false;paint();}})());
-get('onboarding-next').addEventListener('click',()=>void saveInterests());get('skip-interests').addEventListener('click',()=>void saveInterests(true));
-function addCustomInterest(){const input=get<HTMLInputElement>('custom-interest'),value=input.value.trim();if(!value){get('interest-status').textContent='Enter an interest first.';input.focus();return;}if(customInterests.length>=5){get('interest-status').textContent='Choose up to five custom interests.';return;}const next=normalizeCustomInterests([...customInterests,value]);if(next.length===customInterests.length){get('interest-status').textContent='That interest is already added.';return;}customInterests=next;input.value='';get('interest-status').textContent='';paintInterests();}
-get('add-interest').addEventListener('click',addCustomInterest);
-get('custom-interest').addEventListener('keydown',event=>{const e=event as KeyboardEvent;if(e.key==='Enter'&&!e.isComposing){e.preventDefault();addCustomInterest();}});
-get('onboarding-back').addEventListener('click',()=>{if(setupBusy)return;get('onboarding-status').textContent='';get('interest-step').hidden=false;get('consent-step').hidden=true;paint();get('interest-title').focus();});
+get('onboarding-next').addEventListener('click',()=>void dismissWelcome());get('skip-interests').addEventListener('click',()=>void dismissWelcome());
+get('onboarding-back').addEventListener('click',()=>{if(setupBusy)return;pendingAction=null;get('onboarding-status').textContent='';get('welcome-step').hidden=false;get('consent-step').hidden=true;paint();get('welcome-title').focus();});
 get('connect').addEventListener('click',()=>get<HTMLInputElement>('connection-file').click());
 get('connection-file').addEventListener('change',()=>void (async()=>{
  const input=get<HTMLInputElement>('connection-file'),file=input.files?.[0],button=get<HTMLButtonElement>('connect');if(!file)return;
@@ -159,13 +158,19 @@ get('connection-file').addEventListener('change',()=>void (async()=>{
 })());
 async function finishSetup(ai:boolean){
  if(setupBusy)return;
+ if(!ai){await dismissWelcome();return;}
  if(ai&&!connected){showSetup('Start the RedFlag backend, then retry.');return;}
  const start=get<HTMLButtonElement>('start'),community=get<HTMLButtonElement>('community-only');setupBusy=true;start.disabled=true;community.disabled=true;get<HTMLButtonElement>('onboarding-back').disabled=true;get('onboarding-status').textContent='';
- try{await navigator.locks.request('redflag-preferences-v1',async()=>{const latest=await loadPreferences();const next={...changeConsent(latest,ai,new Date().toISOString()),enabled:true};await chrome.storage.local.set({[PREFERENCES_STORAGE_KEY]:next,[onboardingKey]:true});preferences=next;});get('onboarding').hidden=true;await scan();if(ai)await analyzeAll();}
+ try{await navigator.locks.request('redflag-preferences-v1',async()=>{const latest=await loadPreferences();const next=changeConsent(latest,true,new Date().toISOString());await chrome.storage.local.set({[PREFERENCES_STORAGE_KEY]:next,[onboardingKey]:true});preferences=next;});get('onboarding').hidden=true;const resume=pendingAction;pendingAction=null;if(resume)await resume();}
  catch{get('onboarding').hidden=false;get('onboarding-status').textContent='Setup could not be saved. Try again.';get('onboarding-status').scrollIntoView({block:'nearest'});}
  finally{setupBusy=false;start.disabled=false;community.disabled=false;get<HTMLButtonElement>('onboarding-back').disabled=false;paint();}
 }
 async function checkConnection(){
+ if(connectionCheck)return connectionCheck;
+ connectionCheck=checkConnectionNow();
+ try{await connectionCheck;}finally{connectionCheck=null;}
+}
+async function checkConnectionNow(){
  if(connectionBusy)return;connectionBusy=true;get<HTMLButtonElement>('retry-connection').disabled=true;get<HTMLButtonElement>('connect').disabled=true;get('connection-status').textContent='Connecting…';paint();
  try{const result=await chrome.runtime.sendMessage({type:'redflag/backend-status'});connected=result?.connected===true;get('connection-status').textContent=connected?'Backend connected.':result?.error??'Start the RedFlag backend, then retry.';}
  catch{connected=false;get('connection-status').textContent='Connection unavailable. Start the RedFlag backend, then retry.';}
@@ -176,12 +181,11 @@ get('start').addEventListener('click',()=>void finishSetup(true));get('community
 chrome.runtime.onMessage.addListener(message=>{if(message?.type==='redflag/state'&&message.state?.schemaVersion===1&&message.state.pageUrl===pageUrl){acceptState(message.state);paint();}});
 chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes[PREFERENCES_STORAGE_KEY]){preferences=normalizePreferences(changes[PREFERENCES_STORAGE_KEY].newValue,undefined,new Date().toISOString());paint();}});
 void (async()=>{
- preferences=await loadPreferences();customInterests=normalizeCustomInterests((await chrome.storage.local.get(CUSTOM_INTERESTS_KEY))[CUSTOM_INTERESTS_KEY]);chosenInterests=new Set(preferences.priorities);paintInterests();get('onboarding').hidden=location.hash!=='#onboarding'&&Boolean((await chrome.storage.local.get(onboardingKey))[onboardingKey]);
+ preferences=await loadPreferences();customInterests=normalizeCustomInterests((await chrome.storage.local.get(CUSTOM_INTERESTS_KEY))[CUSTOM_INTERESTS_KEY]);get('onboarding').hidden=!['#onboarding','#checks'].includes(location.hash)&&Boolean((await chrome.storage.local.get(onboardingKey))[onboardingKey]);
  const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
  if(tab?.url&&/^https?:\/\//.test(tab.url)){const url=new URL(tab.url);url.search='';url.hash='';url.username='';url.password='';pageUrl=url.href;siteName=url.hostname.replace(/^www\./,'');}
  else {get('status').textContent='Open a website to review its policies.';}
- paint();await refreshSites();
- await checkConnection();
- if(preferences.aiConsent.enabled&&!connected)showSetup();
+ paint();void refreshSites();void checkConnection();
+ if(location.hash==='#checks')showSetup();
  const response=await chrome.runtime.sendMessage({type:'redflag/get-state'});if(response?.ok)acceptState(response.state);await scan();paint();
 })().catch(()=>{get(get('onboarding').hidden?'status':'onboarding-status').textContent='RedFlag is unavailable. Try reopening it.';get('loading').hidden=true;});

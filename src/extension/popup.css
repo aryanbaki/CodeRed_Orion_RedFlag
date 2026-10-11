@@ -47,11 +47,6 @@ a{color:var(--rf-red);overflow-wrap:anywhere;text-underline-offset:3px}
 .finding summary,.summary-detail summary{font-size:12px;font-weight:600;color:var(--rf-red)}
 details summary{cursor:pointer}
 blockquote{margin:10px 0;padding:10px 12px;border-left:2px solid var(--rf-border);background:var(--rf-background);font-size:12px;color:var(--rf-muted);white-space:pre-wrap;overflow-wrap:anywhere}
-.summary-overview{padding:2px 0 18px;border-bottom:1px solid var(--rf-border);margin-bottom:18px}
-.summary-overview .eyebrow{font-size:10px;letter-spacing:1.2px}
-.summary-overview h2{font-size:22px;margin:7px 0 12px}
-.summary-prose{font-size:14px;line-height:1.75;color:var(--rf-text)}
-.summary-coverage{margin-top:12px;font-size:11px;color:var(--rf-metadata)}
 .summary-section-title{font:600 11px/1.4 Arial,sans-serif;letter-spacing:1px;text-transform:uppercase;color:var(--rf-muted);margin:20px 0 10px}
 .summary-neutral{color:var(--rf-muted);font-size:13px;margin:8px 0 16px}
 .summary-card h3{margin:14px 0 6px;font-size:13px}
@@ -90,27 +85,10 @@ textarea::placeholder{color:var(--rf-metadata)}
 #onboarding p{margin:10px 0;color:var(--rf-muted);font-size:13px}
 #onboarding .eyebrow{font-size:10px;letter-spacing:1px;color:var(--rf-red)}
 #onboarding button{margin:4px 4px 4px 0;font-size:13px}
-#interest-choices{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0}
-#interest-choices .interest-choice{margin:0}
-.interest-choice{background:var(--rf-surface);border:1px solid var(--rf-border);color:var(--rf-text);text-align:left;padding:12px 10px;min-height:88px}
-.interest-choice[aria-pressed=true]{border-color:var(--rf-red);background:var(--rf-accent-soft);box-shadow:inset 0 0 0 1px var(--rf-red)}
-.interest-choice span{display:block;font-weight:400;font-size:11px;color:var(--rf-muted);margin-top:5px}
-.custom-label{font-size:12px}
-.custom-interest-row{display:flex;gap:8px;margin:8px 0}
-.custom-interest-row input{min-width:0;flex:1;background:var(--rf-surface);color:var(--rf-text);border:1px solid var(--rf-border);border-radius:7px;padding:9px;font-size:12px}
-.custom-chip{background:var(--rf-accent-soft);color:var(--rf-text);font-size:12px}
-main:has(#onboarding:not([hidden]))>section[aria-label="Current site"],main:has(#onboarding:not([hidden]))>.insight-tabs,main:has(#onboarding:not([hidden]))>section[role="tabpanel"]{display:none}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 [hidden]{display:none!important}
 /* First-use setup follows the same warm, restrained palette as the review. */
-.setup-progress{display:flex;gap:18px;list-style:none;padding:0;margin:0 0 24px;font-size:11px;color:var(--rf-muted)}
-.setup-progress li{display:flex;align-items:center;gap:7px;flex:1}
-.setup-progress li span{display:grid;place-items:center;width:22px;height:22px;border:1px solid var(--rf-border);border-radius:50%;font-size:11px}
-.setup-progress li[aria-current]{color:var(--rf-red);font-weight:600}
-.setup-progress li[aria-current] span{background:var(--rf-red);border-color:var(--rf-red);color:var(--rf-red-contrast)}
 #onboarding h2:focus{outline:none}
-#onboarding .interest-choice{min-height:76px}
-.optional{color:var(--rf-muted);font-weight:400}
 .setup-actions{display:flex;gap:8px;margin-top:16px}
 #onboarding .setup-actions button{margin:0;flex:1}
 .setup-actions.stacked{flex-direction:column}
@@ -127,10 +105,20 @@ main:has(#onboarding:not([hidden]))>section[aria-label="Current site"],main:has(
 #onboarding .text-button{background:transparent;color:var(--rf-red);border:0;padding:4px 0;min-height:32px;text-align:left;margin:2px 0;font-size:12px}
 #onboarding .setup-note{font-size:11px;text-align:center;margin:10px 0 20px}
 .advanced-connection{border-top:1px solid var(--rf-border);padding-top:14px;margin-bottom:12px;font-size:12px;color:var(--rf-muted)}
-#onboarding-status,#interest-status{color:var(--rf-red);font-size:12px;margin-top:10px}
-#onboarding-status:empty,#interest-status:empty{display:none}
 
 .popup-footer{display:flex;justify-content:space-between;border-top:1px solid var(--rf-border);margin-top:22px;padding-top:12px;font-size:12px}
 .popup-footer a{color:var(--rf-muted);text-decoration:none}
 .popup-footer a:hover{color:var(--rf-red);text-decoration:underline}
-main:has(#onboarding:not([hidden]))>.popup-footer{display:none}
+
+#onboarding-status{color:var(--rf-red);font-size:12px;margin-top:10px}
+#onboarding-status:empty{display:none}
+#onboarding .welcome-note{font-size:12px;border-top:1px solid var(--rf-border);padding-top:12px}
+
+#grade-guide{border-top:1px solid var(--rf-border);margin-top:20px;padding-top:16px}
+#grade-guide h2{font:600 13px/1.4 Arial,sans-serif;letter-spacing:0}
+#grade-guide p{font-size:11px;line-height:1.6;color:var(--rf-muted);margin-top:8px}
+#grade-scale{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px;list-style:none;padding:0;margin:14px 0}
+#grade-scale li{display:flex;align-items:center;flex-direction:column;gap:7px;text-align:center;min-width:0}
+#grade-scale .document-grade{width:34px;height:34px;font-size:21px}
+.grade-meaning{font-size:10px;line-height:1.4;color:var(--rf-muted)}
+#grade-guide .grade-guide-note{font-size:11px}

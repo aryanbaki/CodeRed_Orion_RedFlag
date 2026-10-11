@@ -4,7 +4,7 @@ import {PREFERENCES_STORAGE_KEY, type RedFlagPreferences} from '../core/contract
 import {listHistory,deleteHistory,clearHistory,subscribeHistory,type CheckedSite} from '../history/store.ts';
 import {reviewFromSite,RETENTION_DAYS,MAX_SITES} from '../history/model.ts';
 import {applyTheme} from '../ui/theme.ts';
-import {loadPreferences,savePreferences} from '../ui/preferences.ts';
+import {changeConsent,loadPreferences,savePreferences} from '../ui/preferences.ts';
 import {gradeLegend,renderDashboardReview} from '../ui/dashboard-review.ts';
 import {element,dateLabel} from '../ui/dom.ts';
 applyTheme();
@@ -67,12 +67,13 @@ function settingsView(){
  const general=element('section',undefined,'settings-card');
  general.append(element('h2','Automatic checks'),setting('Enable RedFlag','',preferences.enabled,enabled=>updatePreferences(p=>({...p,enabled}))));
  general.querySelector('input')!.id='enabled';
+ const ai=setting('Allow AI policy analysis','Send retrieved public policy text to Google Gemini for analysis and Chat. Turn this off to stop new AI requests.',preferences.aiConsent.enabled,enabled=>updatePreferences(p=>changeConsent(p,enabled,new Date().toISOString())));ai.querySelector('input')!.id='ai-consent';general.append(ai);
  general.append(element('p',preferences.aiConsent.enabled?'Gemini analysis enabled':'Community ratings only','note'),control('Review setup',()=>{void chrome.tabs.create({url:chrome.runtime.getURL('popup.html')+'#onboarding'});}));
  const local=element('section',undefined,'settings-card');
  local.append(element('h2','My sites'),element('p',`Saved for ${RETENTION_DAYS} days on this device.`,'note'),control('Clear history',()=>confirmAction(local,'Delete all saved reviews?',clearHistory),'danger'));
  view.append(general,local);
 }
-function syncSettings(){if(!route().settings)return;const enabled=document.querySelector<HTMLInputElement>('#enabled');if(enabled)enabled.checked=preferences.enabled;const note=document.querySelector('#view .settings-card .note');if(note)note.textContent=preferences.aiConsent.enabled?'Gemini analysis enabled':'Community ratings only';}
+function syncSettings(){if(!route().settings)return;const enabled=document.querySelector<HTMLInputElement>('#enabled');if(enabled)enabled.checked=preferences.enabled;const ai=document.querySelector<HTMLInputElement>('#ai-consent');if(ai)ai.checked=preferences.aiConsent.enabled;const note=document.querySelector('#view .settings-card .note');if(note)note.textContent=preferences.aiConsent.enabled?'Gemini analysis enabled':'Community ratings only';}
 function render(){const current=route(),routeKey=location.hash;const openKeys=renderedRoute===routeKey?[...view.querySelectorAll<HTMLDetailsElement>('details[open][data-key]')].map(d=>d.dataset.key):[];view.replaceChildren();document.querySelector('#sites-nav')!.setAttribute('aria-current',current.settings?'false':'page');document.querySelector('#settings-nav')!.setAttribute('aria-current',current.settings?'page':'false');if(current.settings)settingsView();else if(historyLoadError){view.append(heading('History unavailable','Your settings remain available. Retry or explicitly clear an unsupported history format.'),control('Retry',()=>{void refresh();}),control('Clear history',()=>confirmAction(view,'Reset saved history on this device?',clearHistory),'danger'));}else if(current.origin)detailView(current.origin);else sitesView();for(const details of view.querySelectorAll<HTMLDetailsElement>('details[data-key]'))if(openKeys.includes(details.dataset.key))details.open=true;renderedRoute=routeKey;}
 async function refresh(){const id=++loadId;try{const next=await listHistory();if(id!==loadId)return;sites=next;historyLoadError=undefined;if(route().settings){syncSettings();return;}const active=document.activeElement instanceof HTMLElement?document.activeElement:null;const key=active?.getAttribute('aria-label')??active?.textContent;render();if(key)[...view.querySelectorAll<HTMLElement>('button,a,summary')].find(e=>(e.getAttribute('aria-label')??e.textContent)===key)?.focus({preventScroll:true});}catch(error){historyLoadError=message(error);say(historyLoadError);if(!route().settings)render();}}
 subscribeHistory(()=>{void refresh();});

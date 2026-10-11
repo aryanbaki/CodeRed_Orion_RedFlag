@@ -51,12 +51,14 @@ try {
   // Dashboard settings and popup setup share the same canonical preferences.
   await dashboard.getByRole('link',{name:'Settings',exact:true}).click();
   await expect(dashboard.getByRole('button',{name:'Review setup',exact:true})).toBeVisible();
-  await expect(dashboard.locator('input[type=checkbox]')).toHaveCount(1);
-  const setupOpened=context.waitForEvent('page');await dashboard.getByRole('button',{name:'Review setup',exact:true}).click();const popup=await setupOpened;await popup.waitForLoadState();assert.equal(new URL(popup.url()).hash,'#onboarding');await expect(popup.locator('#onboarding')).toBeVisible();
+  await expect(dashboard.locator('input[type=checkbox]')).toHaveCount(2);
+  const setupOpened=context.waitForEvent('page');await dashboard.getByRole('button',{name:'Review setup',exact:true}).click();const popup=await setupOpened;await popup.waitForLoadState();assert.equal(new URL(popup.url()).hash,'#onboarding');await expect(popup.locator('#welcome-step')).toBeVisible();
   await dashboard.getByRole('checkbox',{name:'Enable RedFlag',exact:false}).uncheck();
   await expect.poll(()=>popup.evaluate(async()=> (await chrome.storage.local.get('redflag.preferences.v1'))['redflag.preferences.v1'].enabled)).toBe(false);
-  if(await popup.locator('#onboarding-next').isVisible())await popup.locator('#onboarding-next').click();await popup.locator('#community-only').click();await expect(popup.locator('#onboarding')).toBeHidden();
-  await expect(dashboard.getByRole('checkbox',{name:'Enable RedFlag',exact:false})).toBeChecked();
+  const disabledPreferences=await popup.evaluate(async()=> (await chrome.storage.local.get('redflag.preferences.v1'))['redflag.preferences.v1']);await popup.locator('#onboarding-next').click();await expect(popup.locator('#onboarding')).toBeHidden();
+  await expect(dashboard.getByRole('checkbox',{name:'Enable RedFlag',exact:false})).not.toBeChecked();assert.deepEqual(await popup.evaluate(async()=> (await chrome.storage.local.get('redflag.preferences.v1'))['redflag.preferences.v1']),disabledPreferences);
+  await popup.goto(base+'/popup.html#checks');await popup.reload();await expect(popup.locator('#consent-step')).toBeVisible();await popup.locator('#community-only').click();await expect(popup.locator('#onboarding')).toBeHidden();assert.deepEqual(await popup.evaluate(async()=> (await chrome.storage.local.get('redflag.preferences.v1'))['redflag.preferences.v1']),disabledPreferences);
+  await dashboard.getByRole('checkbox',{name:'Enable RedFlag',exact:false}).check();await expect(dashboard.getByRole('checkbox',{name:'Enable RedFlag',exact:false})).toBeEnabled();
   await expect(dashboard.getByText('Community ratings only',{exact:true})).toBeVisible();
   await dashboard.screenshot({path:'dist/screenshots/my-sites-settings.png',fullPage:true});
   await dashboard.setViewportSize({width:720,height:900});await dashboard.screenshot({path:'dist/screenshots/my-sites-settings-720.png',fullPage:true});

@@ -88,11 +88,14 @@ try {
  await page.goto('https://service.com/new-signup');
  const rejection=await reopened.evaluate(async ({tabId,pageKey})=>chrome.runtime.sendMessage({type:'redflag/analyze',mode:'all',tabId,pageKey}),{tabId,pageKey:staleKey});assert.equal(rejection.ok,false);assert.ok(['stale-page','no-review'].includes(rejection.code));
  await expect.poll(async()=> (await get())?.documents.every(d=>d.status==='ready')).toBe(true);
- const other=await context.newPage();await other.goto('https://service.com/empty');await other.evaluate(()=>document.querySelector('form').remove());
+ const other=await context.newPage();await other.goto('https://service.com/empty');
  const otherId=await reopened.evaluate(async()=> (await chrome.tabs.query({url:'https://service.com/empty'}))[0].id);
- await expect.poll(()=>worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),otherId)).toBe('');
- // The unknown badge can precede the debounced removal discovery; wait for that state too.
- await expect.poll(()=>worker.evaluate(async tabId=>(await chrome.storage.session.get('redflag.jobs.v1'))['redflag.jobs.v1'].sessions[tabId]?.state.documents.length,otherId)).toBe(0);
+ await expect.poll(()=>worker.evaluate(async tabId=>(await chrome.storage.session.get('redflag.jobs.v1'))['redflag.jobs.v1'].sessions[tabId]?.state.documents.length,otherId)).toBe(2);
+ await expect.poll(()=>worker.evaluate(async tabId=>(await chrome.storage.session.get('redflag.jobs.v1'))['redflag.jobs.v1'].sessions[tabId]?.state.documents.every(d=>d.status==='ready'),otherId)).toBe(true);
+ await other.evaluate(()=>document.querySelector('form').remove());
+ await other.waitForTimeout(250);
+ assert.equal(await worker.evaluate(async tabId=>(await chrome.storage.session.get('redflag.jobs.v1'))['redflag.jobs.v1'].sessions[tabId]?.state.documents.length,otherId),2);
+ assert.equal(await worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),otherId),'E');
  await page.bringToFront();await expect.poll(()=>worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),tabId)).toBe('E');
  await reopened.reload();
  await expect(reopened.locator('.overall-copy h2')).toHaveText('service.com');

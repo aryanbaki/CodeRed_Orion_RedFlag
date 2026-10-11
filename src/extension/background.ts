@@ -16,7 +16,7 @@ import {seedServices,seedFetchedAt} from '../background/community-seed.ts';
 import type {Extraction} from '../background/extraction.ts';
 import {publicDocumentUrl} from '../discovery/urls.ts';
 import {ToolbarController} from '../background/toolbar.ts';
-import {AnalysisFailure} from '../background/failures.ts';
+import {AnalysisFailure,reviewFailure} from '../background/failures.ts';
 import type {AnalysisActionResponse,AnalysisCommand} from '../core/analysis-actions.ts';
 import type {ScanCurrentCommand,ScanCurrentResponse} from '../core/discovery-actions.ts';
 import {getHistory,recordReview} from '../history/store.ts';
@@ -27,7 +27,7 @@ const manualAccess=new Map<number,{pageUrl:string;documentId?:string}>();
 const scans=new Map<number,Promise<ScanCurrentResponse>>();
 const SESSION_KEY = 'redflag.jobs.v1';
 interface Job {tabId:number;pageKey:string;documentId:string;attempts:number;bypassCache?:boolean}
-interface Session {browserDocumentId?:string;state:ReviewState;historyOrigin?:string}
+interface Session {browserDocumentId?:string;state:ReviewState;historyOrigin?:string;analysisMode?:'all'|'recheck'}
 interface Snapshot {sessions:Record<string,Session>;jobs:Job[];cooldowns?:Record<string,number>}
 let snapshot:Snapshot = {sessions:{},jobs:[]};
 let resetting=false,erasingDevice=false,dataEpoch=0;
@@ -54,6 +54,7 @@ const initialized = (async () => {
   if (stored?.sessions && Array.isArray(stored.jobs)) snapshot = stored;
 })();
 const commonRequests=new Map<string,Promise<DiscoveredDocument[]>>();
+function clearCommonRequests(origin:string) {for(const key of commonRequests.keys())if(key.startsWith(origin+'|'))commonRequests.delete(key);}
 const communityRequests=new Map<string,Promise<import('../core/contracts.ts').CommunityReference[]>>();
 const communityAttempts=new Map<string,number>();
 async function communityFor(host:string) {
@@ -157,6 +158,10 @@ async function publish(tabId:number,pageKey:string) {
   await chrome.runtime.sendMessage({type:'redflag/state',state:published}).catch(() => {});
 }
 function jobKey(job:Job) {return job.pageKey + ':' + job.documentId;}
+function finishAnalysisBatch(tabId:number,pageKey:string) {
+  const session=snapshot.sessions[tabId];
+  if(session?.state.pageKey===pageKey && !session.state.discoveryPending && !snapshot.jobs.some(job=>job.tabId===tabId && job.pageKey===pageKey))delete session.analysisMode;
+}
 let pumping=false;
 async function pump() {
   if(pumping) return; pumping=true;
@@ -172,7 +177,9 @@ async function pump() {
     if (!session || session.state.pageKey !== job.pageKey || !review) {snapshot.jobs = snapshot.jobs.filter(j => j !== job);await persist();continue;}
     if (job.attempts >= 2) {
       review.status = 'unrated';review.grade = 'Unrated';review.reason = 'timeout';
-      snapshot.jobs = snapshot.jobs.filter(j => j !== job);await publish(job.tabId,job.pageKey);continue;
+      delete review.assessment;review.cached=false;delete review.freshness.cacheExpiresAt;
+      review.failure=reviewFailure('analysis','timeout');
+      snapshot.jobs = snapshot.jobs.filter(j => j !== job);finishAnalysisBatch(job.tabId,job.pageKey);await publish(job.tabId,job.pageKey);continue;
     }
     job.attempts++;running++;inFlight.add(key);
     await persist(); // Persist retry budget before any network work.
@@ -180,7 +187,7 @@ async function pump() {
       preferences:async () => { const prefs = await preferences(); const savedSession=snapshot.sessions[job.tabId];
         if(savedSession?.historyOrigin && !(await getHistory(savedSession.historyOrigin).catch(()=>undefined))) return {...prefs,enabled:false};
         return snapshot.sessions[job.tabId]?.state.pageKey === job.pageKey && snapshot.sessions[job.tabId]?.state.documents.some(d => d.document.id === job.documentId) ? prefs : {...prefs,enabled:false}; },download,extract,
-      versions:backend,analyze:doc=>analyze(doc,()=>snapshot.sessions[job.tabId]?.state.pageKey===job.pageKey && snapshot.sessions[job.tabId]?.state.documents.some(d=>d.document.id===job.documentId)===true),bypassCache:job.bypassCache,
+      versions:backend,analyze:doc=>analyze(doc,()=>snapshot.sessions[job.tabId]?.state.pageKey===job.pageKey && snapshot.sessions[job.tabId]?.state.documents.some(d=>d.document.id===job.documentId)===true),get bypassCache(){return job.bypassCache;},
       catalog:async () => parseCommunityCatalog((await chrome.storage.local.get(COMMUNITY_CATALOG_KEY))[COMMUNITY_CATALOG_KEY]).concat(parseTosdrSearch(seedServices,seedFetchedAt)),
       cacheGet:async key => ((await chrome.storage.local.get(CACHE_KEY))[CACHE_KEY] as Record<string,CacheEntry> | undefined)?.[key],
       cachePut:async (cacheKey,entry) => {
@@ -201,6 +208,7 @@ async function pump() {
       await publish(job.tabId,job.pageKey);
     }).catch(() => {}).finally(async () => {
       snapshot.jobs = snapshot.jobs.filter(j => j !== job);inFlight.delete(key);running--;
+      finishAnalysisBatch(job.tabId,job.pageKey);
       if(job.tabId<0 && !snapshot.jobs.some(j=>j.tabId===job.tabId)) delete snapshot.sessions[job.tabId];
       await persist();void pump();
     });
@@ -224,11 +232,14 @@ async function discover(tabId:number,browserDocumentId:string | undefined,pageUr
   });
   session.state.discoveryPending=true;
   const origin=new URL(pageUrl).origin;
-  let common=commonRequests.get(origin);
+  // A prior page that linked Privacy directly must not suppress probing Privacy
+  // on another page of the same origin where that kind is missing.
+  const commonKey=origin+'|'+['terms','privacy','cookies'].filter(kind=>!documents.some(document=>document.kind===kind)).join(',');
+  let common=commonRequests.get(commonKey);
   if(!common){
     common=findCommonPolicies(origin,documents,url=>retrievePublicDocument(url,permitted,fetch,4000));
-    commonRequests.set(origin,common);
-    setTimeout(()=>commonRequests.delete(origin),3600000);
+    commonRequests.set(commonKey,common);
+    setTimeout(()=>{if(commonRequests.get(commonKey)===common)commonRequests.delete(commonKey);},3600000);
   }
   void common.then(async found=>{
     const active=snapshot.sessions[tabId];
@@ -237,18 +248,20 @@ async function discover(tabId:number,browserDocumentId:string | undefined,pageUr
     for(const document of found){
       if(active.state.documents.some(d=>d.document.url===document.url && d.document.kind===document.kind) || active.state.documents.length>=24)continue;
       active.state.documents.push(...pendingState(generation,pageUrl,context,[document]).documents);
-      snapshot.jobs.push({tabId,pageKey:generation,documentId:document.id,attempts:0});
+      snapshot.jobs.push({tabId,pageKey:generation,documentId:document.id,attempts:0,bypassCache:active.analysisMode==='recheck'});
     }
+    finishAnalysisBatch(tabId,generation);
     await publish(tabId,generation);void pump();
   });
   session.state.context=context;
-  session.state.documents = session.state.documents.filter(review => review.document.id.startsWith('common-') || review.document.id.startsWith('manual-') || documents.some(d => d.url === review.document.url && d.kind === review.document.kind));
-  snapshot.jobs = snapshot.jobs.filter(job => job.pageKey !== session.state.pageKey || session.state.documents.some(d => d.document.id === job.documentId));
+  // A link disappearing from a dialog/footer does not invalidate an agreement
+  // already discovered on this page. Retain its job, evidence and failure until
+  // browser navigation establishes a new review generation.
   for (const document of documents) {
     if (session.state.documents.some(d => d.document.url === document.url && d.document.kind === document.kind)) continue;
     if (session.state.documents.length >= 24) break;
     session.state.documents.push(...pendingState(session.state.pageKey,pageUrl,context,[document]).documents);
-    snapshot.jobs.push({tabId,pageKey:session.state.pageKey,documentId:document.id,attempts:0});
+    snapshot.jobs.push({tabId,pageKey:session.state.pageKey,documentId:document.id,attempts:0,bypassCache:session.analysisMode==='recheck'});
   }
   await publish(tabId,session.state.pageKey);
   // Return the initial state first; later updates are routed by browser document id.
@@ -312,28 +325,38 @@ async function analysisAction(message:AnalysisCommand,sender:chrome.runtime.Mess
     if(!Number.isInteger(tabId) || tabId!<0) return reject('no-review','No current tab review is available.');
     const tab=await chrome.tabs.get(tabId!).catch(()=>undefined);
     let current=snapshot.sessions[tabId!];
-    if(message.mode==='recheck' && (!current || !current.state.documents.length)) {
+    if(!current)return reject('no-review','The page changed. Reopen the current review.');
+    if(current && message.pageKey!==current.state.pageKey)return reject('stale-page','The page changed. Reload the current review.');
+    if(message.mode!=='one' && (!current || !current.state.documents.length)) {
+      const priorPageKey=current?.state.pageKey;
       const scan=await scanCurrent({type:'redflag/scan-current',tabId:tabId!},sender);
       if(!scan.ok)return reject('no-review',scan.error);
       current=snapshot.sessions[tabId!];
-      if(current && !current.state.documents.length)return {ok:true,state:structuredClone(current.state),queuedDocumentIds:[],joinedDocumentIds:[]};
       // A fresh scan may establish the first generation; use that authoritative identity.
-      if(current)message={...message,pageKey:current.state.pageKey};
+      if(current && !priorPageKey)message={...message,pageKey:current.state.pageKey};
     }
     if(!current) return reject('no-review','No discovered policies are available in this tab.');
     try {if(!tab?.url || safePageUrl(tab.url)!==current.state.pageUrl || message.pageKey!==current.state.pageKey) return reject('stale-page','The page changed. Reload the current review.');} catch {return reject('stale-page','The page changed.');}
   }
   const session=snapshot.sessions[tabId!];
   const targets=message.type==='redflag/analyze' && message.mode==='one' ? session.state.documents.filter(d=>d.document.id===message.documentId) : session.state.documents;
-  if(!targets.length) return reject('document-not-found','No matching discovered document is available.');
+  if(message.type==='redflag/analyze' && message.mode==='one' && !targets.length)return reject('document-not-found','No matching discovered document is available.');
+  if(message.type==='redflag/recheck-site' && !targets.length)return reject('document-not-found','No matching discovered document is available.');
+  if(message.type==='redflag/recheck-site' || message.mode!=='one') {
+    // Keep all-policy intent while asynchronous common URLs and dynamic legal
+    // links arrive. Jobs already in progress join the same independent queue.
+    session.analysisMode=session.analysisMode==='recheck' || message.type==='redflag/recheck-site' || message.mode==='recheck' ? 'recheck' : 'all';
+  }
   const queuedDocumentIds:string[]=[],joinedDocumentIds:string[]=[];
   for(const review of targets) {
-    if(snapshot.jobs.some(j=>j.tabId===tabId && j.pageKey===session.state.pageKey && j.documentId===review.document.id)) {joinedDocumentIds.push(review.document.id);continue;}
     const bypassCache=message.type==='redflag/recheck-site' || message.mode==='recheck';
+    const existing=snapshot.jobs.find(j=>j.tabId===tabId && j.pageKey===session.state.pageKey && j.documentId===review.document.id);
+    if(existing) {if(bypassCache)existing.bypassCache=true;joinedDocumentIds.push(review.document.id);continue;}
     const replacement=pendingState(session.state.pageKey,session.state.pageUrl,session.state.context,[review.document]).documents[0];
     session.state.documents[session.state.documents.indexOf(review)]=replacement;
     snapshot.jobs.push({tabId:tabId!,pageKey:session.state.pageKey,documentId:review.document.id,attempts:0,bypassCache});queuedDocumentIds.push(review.document.id);
   }
+  finishAnalysisBatch(tabId!,session.state.pageKey);
   await publish(tabId!,session.state.pageKey);setTimeout(()=>void pump(),0);
   return {ok:true,state:structuredClone(session.state),queuedDocumentIds,joinedDocumentIds};
 }
@@ -400,7 +423,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply) => {
         if(!trustedUi(sender))return {ok:false,error:'Trusted controls required.'};
         const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
         if(!tab?.id||!tab.url||!/^https?:/.test(tab.url))return {ok:false,error:'Open a website.'};
-        commonRequests.delete(new URL(tab.url).origin);return scanCurrent({type:'redflag/scan-current',tabId:tab.id},sender);
+        clearCommonRequests(new URL(tab.url).origin);return scanCurrent({type:'redflag/scan-current',tabId:tab.id},sender);
       }
       case 'redflag/add-policy': {
         if(!trustedUi(sender)||typeof message.url!=='string'||message.url.length>2000||!['privacy','terms','cookies','unknown'].includes(message.kind))return {ok:false,error:'Choose a public policy link and type.'};
@@ -559,4 +582,15 @@ chrome.tabs.onActivated.addListener(({tabId})=>{void initialized.then(async()=>{
   let current=false;try{current=!!tab?.url && !!state && safePageUrl(tab.url)===state.pageUrl;}catch{}
   await toolbar.update(tabId,current?state:undefined);
 });});
-void initialized.then(async()=>{for(const tab of await chrome.tabs.query({})) if(tab.id !== undefined) {const state=snapshot.sessions[tab.id]?.state;let current=false;try{current=!!tab.url && !!state && safePageUrl(tab.url)===state.pageUrl;}catch{}if(!current) {delete snapshot.sessions[tab.id];snapshot.jobs=snapshot.jobs.filter(j=>j.tabId!==tab.id);}await toolbar.update(tab.id,current?state:undefined);}await persist();});
+void initialized.then(async()=>{
+  for(const tab of await chrome.tabs.query({}))if(tab.id!==undefined){
+    const session=snapshot.sessions[tab.id],state=session?.state;
+    let current=false;try{current=!!tab.url && !!state && safePageUrl(tab.url)===state.pageUrl;}catch{}
+    if(!current){delete snapshot.sessions[tab.id];snapshot.jobs=snapshot.jobs.filter(job=>job.tabId!==tab.id);}
+    // Common-policy fetch promises do not survive MV3 suspension. Recreate the
+    // pending discovery work so an all-policy batch cannot remain pending forever.
+    else if(state?.discoveryPending && (await preferences()).enabled)await discover(tab.id,session.browserDocumentId,state.pageUrl,state.context,state.documents.map(review=>review.document));
+    await toolbar.update(tab.id,current?state:undefined);
+  }
+  await persist();
+});

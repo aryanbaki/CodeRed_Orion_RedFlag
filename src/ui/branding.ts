@@ -1,5 +1,6 @@
 /** Grade colors from the supplied glossy flag references. */
 export const gradeColors = {S:'#00b52c', A:'#9bdd00', B:'#ffd000', C:'#ff7200', D:'#ff151b', E:'#b8000c'} as const;
+export const gradeMeanings = [['S','Few concerns'],['A','Some concerns'],['B','Moderate concerns'],['C','Significant concerns'],['D','High concerns'],['E','Highest concerns']] as const;
 export type FlagGrade = keyof typeof gradeColors;
 export function isFlagGrade(grade:string): grade is FlagGrade {return Object.hasOwn(gradeColors,grade);}
 

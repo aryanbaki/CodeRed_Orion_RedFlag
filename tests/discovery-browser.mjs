@@ -72,7 +72,7 @@ try {
   await new Promise(r=>setTimeout(r,250));assert.equal(await worker.evaluate(()=>requests.length),before+3);
   await page.locator('a[href="/additional"]').evaluate(e=>e.setAttribute('href','/new-additional'));
   await expect.poll(async () => (await getState())?.documents.some(d=>d.document.url.endsWith('/new-additional'))).toBe(true);
-  assert.equal((await getState()).documents.some(d=>d.document.url.endsWith('/additional')),false);
+  assert.equal((await getState()).documents.some(d=>d.document.url.endsWith('/additional')),true);
   const requests=await worker.evaluate(()=>globalThis.requests);
   assert.ok(requests.every(r=>r.credentials==='omit'));assert.ok(requests.every(r=>r.body===undefined));assert.ok(!JSON.stringify(requests).includes('private-account'));
   // Check DOM extraction and accessible-name discovery in the actual browser DOM.

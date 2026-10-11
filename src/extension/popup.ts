@@ -72,11 +72,12 @@ async function saveInterests(skip=false){
 function paint(){
  if(!preferences)return;
  const scanning=busy||Boolean(state?.discoveryPending);
- get('no-policies').hidden=Boolean(scanning||!pageUrl||state?.documents.length);
- const showInsights=analysisStarted||summarizeReview(state).grade!=='Unrated';
+ const noPolicies=Boolean(pageUrl&&state&&!scanning&&!state.documents.length&&summarizeReview(state).source==='unknown');
+ get('no-policies').hidden=!noPolicies;
+ const showInsights=!noPolicies&&(analysisStarted||summarizeReview(state).grade!=='Unrated');
  get('tab-flags').parentElement!.hidden=!showInsights;
  for(const tab of tabs)get('panel-'+tab).hidden=!showInsights||tab!==selectedTab;
- get('loading').hidden=!scanning;get('compact-review').hidden=!pageUrl;
+ get('loading').hidden=!scanning;get('compact-review').hidden=!pageUrl||noPolicies;
  if(pageUrl)renderPopupReview(get('compact-review'),state,preferences,id=>void analyzePolicy(id),busyIds,()=>void analyzeAll(),busy,siteName);
  get<HTMLButtonElement>('chat-send').disabled=chatBusy||!pageUrl||!preferences.enabled;
  get<HTMLTextAreaElement>('chat-input').disabled=chatBusy||!pageUrl||!preferences.enabled;

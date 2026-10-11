@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "RedFlag",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Simple grades for website privacy, terms, and cookie policies.",
   "permissions": [
     "activeTab",

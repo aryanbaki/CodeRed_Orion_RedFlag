@@ -1,3 +1,4 @@
+import {CUSTOM_INTERESTS_KEY,interestChoices,normalizeCustomInterests,prioritizeFindings} from '../core/interests.ts';
 import {requestCurrentScan} from '../core/discovery-actions.ts';
 import {requestAnalysis} from '../core/analysis-actions.ts';
 import {applyTheme} from '../ui/theme.ts';
@@ -12,6 +13,7 @@ import {changeConsent,loadPreferences,normalizePreferences,savePreferences} from
 applyTheme();
 const get=<T extends HTMLElement=HTMLElement>(id:string)=>document.querySelector<T>('#'+id)!;
 let preferences:Awaited<ReturnType<typeof loadPreferences>>,state:ReviewState|null=null,pageUrl:string|null=null,busy=false,connected=false,siteName='This site',chatBusy=false,chatGeneration=0;
+let customInterests:string[]=[],chosenInterests=new Set<import('../core/contracts.ts').RiskCategory>();
 let chatHistory:ChatTurn[]=[],selectedTab='flags';
 const busyIds=new Set<string>(),onboardingKey='redflag.onboarding.v1';
 const recent=mountRecentItems(get('recent-items'),[],origin=>void chrome.tabs.create({url:chrome.runtime.getURL('dashboard.html')+'#site='+encodeURIComponent(origin)}));
@@ -31,14 +33,30 @@ function citedCard(f:EvidenceFinding&{policyLabel?:string},benefit=false){
 }
 function paintInsights(){
  const insights=siteInsights(state),flags=get('flags-content'),summary=get('summary-content');flags.replaceChildren();summary.replaceChildren();
- for(const f of insights.findings)flags.append(citedCard(f));
- if(!insights.findings.length)flags.append(element('p',insights.pending?'Reading policies…':insights.summaries.length?'No supported red flags in the text reviewed. Missing evidence can still prevent a grade.':'Analyze policies to see supported red flags.','empty-state'));
- if(insights.summaries.length)summary.append(element('h3','At a glance'));
- for(const s of insights.summaries){const card=element('article',undefined,'summary-card');card.append(element('h3',s.label),element('p',s.text));summary.append(card);}
- if(!insights.summaries.length)summary.append(element('p',insights.pending?'Reading policies…':'Analyze policies to see a summary.','empty-state'));
- if(insights.findings.length){summary.append(element('h3','Watch out for'));for(const f of insights.findings.slice(0,3))summary.append(citedCard(f));}
- if(insights.protections.length){summary.append(element('h3','In your favor'));for(const p of insights.protections.slice(0,3))summary.append(citedCard(p,true));}
+ const findings=prioritizeFindings(insights.findings,preferences.priorities,customInterests);
+ for(const f of findings)flags.append(citedCard(f));
+ if(!findings.length)flags.append(element('p',insights.pending?'Reading policies…':insights.summaries.length?'No supported red flags in the text reviewed.':'Analyze policies to see what matters.','empty-state'));
+ if(!insights.summaries.length){summary.append(element('p',insights.pending?'Reading policies…':'Your overview will appear after analysis.','empty-state'));return;}
+ const overview=element('article',undefined,'summary-overview');overview.append(element('p','THE QUICK READ','eyebrow'),element('h2',findings.length?'What you’re agreeing to':'What the policies say'));
+ const points=element('ul',undefined,'summary-points');
+ for(const f of findings.slice(0,3)){const li=element('li');li.append(element('strong',f.title+' — '),document.createTextNode(f.explanation));points.append(li);}
+ if(!findings.length)points.append(element('li','No supported risks were identified in the reviewed text. This does not establish that every practice is covered.'));
+ overview.append(points);
+ const kinds=new Set(insights.summaries.map(s=>s.label)),partial=insights.summaries.some(s=>s.partial);
+ overview.append(element('p',`${kinds.size} policy ${kinds.size===1?'type':'types'} reviewed${partial?' · Some text is incomplete':''}. Grades stay unknown where evidence is missing.`,'summary-coverage'));summary.append(overview);
+ if(insights.protections.length){summary.append(element('h3','Working in your favor','summary-section-title'));for(const p of insights.protections.slice(0,2))summary.append(citedCard(p,true));}
+ summary.append(element('h3','Policy notes','summary-section-title'));
+ for(const s of insights.summaries){const card=element('details',undefined,'summary-card summary-detail');card.append(element('summary',s.label+(s.partial?' · Partial':'')),element('p',s.text));summary.append(card);}
 }
+function paintInterests(){
+ const choices=get('interest-choices');choices.replaceChildren();
+ for(const choice of interestChoices){const button=element('button',choice.label,'interest-choice');button.type='button';button.dataset.category=choice.category;button.setAttribute('aria-pressed',String(chosenInterests.has(choice.category)));button.append(element('span',choice.detail));button.addEventListener('click',()=>{chosenInterests.has(choice.category)?chosenInterests.delete(choice.category):chosenInterests.add(choice.category);paintInterests();});choices.append(button);}
+ const chips=get('custom-interests');chips.replaceChildren();for(const label of customInterests){const button=element('button',label+' ×','custom-chip');button.setAttribute('aria-label','Remove interest '+label);button.addEventListener('click',()=>{customInterests=customInterests.filter(v=>v!==label);paintInterests();});chips.append(button);}
+}
+async function saveInterests(skip=false){
+ try{await navigator.locks.request('redflag-preferences-v1',async()=>{const latest=await loadPreferences();preferences={...latest,priorities:skip?[]:[...chosenInterests]};await savePreferences(preferences);await chrome.storage.local.set({[CUSTOM_INTERESTS_KEY]:skip?[]:customInterests});});if(skip){chosenInterests.clear();customInterests=[];}get('interest-step').hidden=true;get('consent-step').hidden=false;paint();}catch{get('interest-status').textContent='Could not save your choices. Try again.';}
+}
+
 function paint(){
  if(!preferences)return;
  get<HTMLInputElement>('review-enabled').checked=preferences.enabled;
@@ -50,7 +68,7 @@ function paint(){
  get<HTMLTextAreaElement>('chat-input').disabled=chatBusy||!pageUrl||!preferences.enabled;
  paintInsights();
 }
-function showSetup(message?:string){get('onboarding').hidden=false;if(message)get('connection-status').textContent=message;get('onboarding').scrollIntoView({block:'start'});}
+function showSetup(message?:string){get('onboarding').hidden=false;get('interest-step').hidden=true;get('consent-step').hidden=false;if(message)get('connection-status').textContent=message;get('onboarding').scrollIntoView({block:'start'});}
 function canAnalyze(){if(!preferences.aiConsent.enabled||!connected){showSetup(!connected?'Start the RedFlag backend, then retry.':'Enable checks to continue.');return false;}return true;}
 async function scan(){
  if(!pageUrl||busy||!preferences.enabled)return;
@@ -97,7 +115,10 @@ async function sendChat(){
 }
 get('settings-link').addEventListener('click',()=>{get<HTMLDetailsElement>('settings').open=!get<HTMLDetailsElement>('settings').open;get('settings').scrollIntoView();});
 get('open-summary').addEventListener('click',()=>void chrome.tabs.create({url:chrome.runtime.getURL('dashboard.html')}));
-get('setup').addEventListener('click',()=>showSetup());
+get('setup').addEventListener('click',()=>{chosenInterests=new Set(preferences.priorities);paintInterests();get('onboarding').hidden=false;get('interest-step').hidden=false;get('consent-step').hidden=true;get('onboarding').scrollIntoView();});
+get('device-vault').addEventListener('click',()=>void chrome.tabs.create({url:chrome.runtime.getURL('data.html')}));
+get('onboarding-next').addEventListener('click',()=>void saveInterests());get('skip-interests').addEventListener('click',()=>void saveInterests(true));
+get('add-interest').addEventListener('click',()=>{const input=get<HTMLInputElement>('custom-interest');if(customInterests.length>=5){get('interest-status').textContent='Choose up to five custom interests.';return;}customInterests=normalizeCustomInterests([...customInterests,input.value]);input.value='';paintInterests();});
 get('connect').addEventListener('click',()=>get<HTMLInputElement>('connection-file').click());
 get('connection-file').addEventListener('change',()=>void (async()=>{
  const input=get<HTMLInputElement>('connection-file'),file=input.files?.[0],button=get<HTMLButtonElement>('connect');if(!file)return;
@@ -117,7 +138,7 @@ get('review-enabled').addEventListener('change',()=>void (async()=>{preferences=
 chrome.runtime.onMessage.addListener(message=>{if(message?.type==='redflag/state'&&message.state?.schemaVersion===1&&message.state.pageUrl===pageUrl){acceptState(message.state);paint();}});
 chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes[PREFERENCES_STORAGE_KEY]){preferences=normalizePreferences(changes[PREFERENCES_STORAGE_KEY].newValue,undefined,new Date().toISOString());paint();}});
 void (async()=>{
- preferences=await loadPreferences();get('onboarding').hidden=location.hash!=='#onboarding'&&Boolean((await chrome.storage.local.get(onboardingKey))[onboardingKey]);
+ preferences=await loadPreferences();customInterests=normalizeCustomInterests((await chrome.storage.local.get(CUSTOM_INTERESTS_KEY))[CUSTOM_INTERESTS_KEY]);chosenInterests=new Set(preferences.priorities);paintInterests();get('onboarding').hidden=location.hash!=='#onboarding'&&Boolean((await chrome.storage.local.get(onboardingKey))[onboardingKey]);
  const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
  if(tab?.url&&/^https?:\/\//.test(tab.url)){const url=new URL(tab.url);url.search='';url.hash='';url.username='';url.password='';pageUrl=url.href;get('domain').textContent=url.hostname;siteName=url.hostname.replace(/^www\./,'');}
  else {get('domain').textContent='Open a website';get('status').textContent='Open a website to review its policies.';}

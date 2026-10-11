@@ -1,6 +1,6 @@
 {
   "name": "policy-review-framework",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "type": "module",
   "engines": {
@@ -21,6 +21,7 @@
     "test:site-discovery": "npm run build && node tests/site-discovery-browser.mjs",
     "test:dashboard": "npm run build && node tests/dashboard-browser.mjs",
     "test:popup-redesign": "npm run build && node tests/popup-redesign.mjs",
+    "test:vault": "npm run build && node tests/device-vault-browser.mjs",
     "test:branding": "npm run build && node tests/branding-browser.mjs",
     "test:integration": "npm run build && node --experimental-strip-types tests/site-review-integration.ts"
   },

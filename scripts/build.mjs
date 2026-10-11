@@ -17,3 +17,6 @@ await build({entryPoints:['src/extension/dashboard.ts'],bundle:true,format:'esm'
 for (const name of ['dashboard.html','dashboard.css']) await copyFile('src/extension/'+name,'dist/extension/'+name);
 
 await copyFile('docs/tosdr-data.md','dist/extension/tosdr-data.txt');
+
+await build({entryPoints:['src/extension/data.ts'],bundle:true,format:'esm',platform:'browser',target:'chrome120',outfile:'dist/extension/data.js'});
+for(const name of ['data.html','data.css'])await copyFile('src/extension/'+name,'dist/extension/'+name);

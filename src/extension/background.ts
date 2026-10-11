@@ -30,6 +30,7 @@ interface Job {tabId:number;pageKey:string;documentId:string;attempts:number;byp
 interface Session {browserDocumentId?:string;state:ReviewState;historyOrigin?:string}
 interface Snapshot {sessions:Record<string,Session>;jobs:Job[];cooldowns?:Record<string,number>}
 let snapshot:Snapshot = {sessions:{},jobs:[]};
+let resetting=false,erasingDevice=false,dataEpoch=0;
 let running = 0;
 const inFlight = new Set<string>();
 let creatingOffscreen:Promise<void> | undefined;
@@ -72,7 +73,7 @@ async function communityFor(host:string) {
         const matched=records.filter(r=>r.domains.some(d=>d.replace(/^www\./,'')===host));
         writes=writes.catch(()=>{}).then(async()=>{
           const latest=parseCommunityCatalog((await chrome.storage.local.get(COMMUNITY_CATALOG_KEY))[COMMUNITY_CATALOG_KEY]);
-          await chrome.storage.local.set({[COMMUNITY_CATALOG_KEY]:latest.filter(r=>!r.domains.some(d=>d.replace(/^www\./,'')===host)).concat(matched).slice(-500)});
+          if(!resetting)await chrome.storage.local.set({[COMMUNITY_CATALOG_KEY]:latest.filter(r=>!r.domains.some(d=>d.replace(/^www\./,'')===host)).concat(matched).slice(-500)});
         });await writes;
         return lookupCommunity(host,'',matched);
       }catch{return refs;}
@@ -138,6 +139,7 @@ async function analyze(document:AnalysisDocument,isCurrent:()=>boolean=()=>true)
   } finally {clearTimeout(timeout);controllers.delete(controller);}
 }
 async function publish(tabId:number,pageKey:string) {
+  if(resetting)return;
   const session = snapshot.sessions[tabId];
   if (!session || session.state.pageKey !== pageKey) return;
   session.state.updatedAt = new Date().toISOString();
@@ -147,7 +149,7 @@ async function publish(tabId:number,pageKey:string) {
     const saved=await getHistory(session.historyOrigin).catch(()=>undefined);
     if (!saved || saved.generation !== pageKey) return;
   }
-  if (published.documents.length || published.community?.length) await recordReview(published,{requireExisting:!!session.historyOrigin}).catch(()=>{});
+  if (!resetting && (published.documents.length || published.community?.length)) await recordReview(published,{requireExisting:!!session.historyOrigin}).catch(()=>{});
   if (snapshot.sessions[tabId]?.state.pageKey !== pageKey) return;
   if (tabId>=0) await toolbar.update(tabId,published);
   const options:chrome.tabs.MessageSendOptions = session.browserDocumentId ? {documentId:session.browserDocumentId} : {frameId:0};
@@ -184,6 +186,7 @@ async function pump() {
       cachePut:async (cacheKey,entry) => {
         // Cache mutations share the serialization queue with session writes.
         writes = writes.catch(() => {}).then(async () => {
+          if(resetting)return;
           const cache = ((await chrome.storage.local.get(CACHE_KEY))[CACHE_KEY] ?? {}) as Record<string,CacheEntry>;
           cache[cacheKey] = entry;
           const entries = Object.entries(cache as Record<string,CacheEntry>).filter(([,v]) => Date.parse(v.expiresAt) > Date.now()).slice(-50);
@@ -370,16 +373,19 @@ async function chatAction(command:ChatCommand,sender:chrome.runtime.MessageSende
 let localConnection:Promise<Backend>|undefined;
 async function connectionAction(message:{type:string;config?:unknown},sender:chrome.runtime.MessageSender){
  if(!trustedUi(sender))return {ok:false,connected:false,error:'Trusted setup required.'};
+ if(erasingDevice)return {ok:false,connected:false,error:'Device reset in progress.'};
+ const epoch=dataEpoch;
  let config=message.type==='redflag/connect-backend'?parseBackend(message.config):await backend();
  try{
   if(!config&&message.type==='redflag/backend-status'){
    if(!await permitted('http://127.0.0.1:8787'))throw Error('Allow browser access to the backend.');
    localConnection??=connectLocalBackend().finally(()=>{localConnection=undefined;});
-   config=await localConnection;await chrome.storage.local.set({[BACKEND_KEY]:config});
+   config=await localConnection;if(epoch!==dataEpoch)throw Error('Device was reset. Reopen RedFlag.');await chrome.storage.local.set({[BACKEND_KEY]:config});
   }
   if(!config)throw Error('Connection unavailable. Retry or use advanced setup.');
   if(!await permitted(config.baseUrl))throw Error('Allow browser access to the backend.');
   await checkBackend(config);
+  if(epoch!==dataEpoch)throw Error('Device was reset. Reopen RedFlag.');
   if(message.type==='redflag/connect-backend')await chrome.storage.local.set({[BACKEND_KEY]:config});
   return {ok:true,connected:true,model:config.model};
  }catch(error){return {ok:false,connected:false,error:error instanceof Error&&error.message.length<=150?error.message:'Start the RedFlag backend, then reconnect.'};}
@@ -390,6 +396,21 @@ chrome.runtime.onMessage.addListener((message,sender,reply) => {
   void (async () => {
     await initialized;
     switch (message.type) {
+      case 'redflag/reset-device': {
+        if(!trustedUi(sender))return {ok:false,error:'Trusted settings required.'};
+        erasingDevice=true;dataEpoch++;try{
+        resetting=true;
+        const paused={...createDefaultPreferences(new Date().toISOString()),enabled:false};
+        await chrome.storage.local.set({[PREFERENCES_STORAGE_KEY]:paused});
+        for(const controller of controllers)controller.abort();
+        snapshot={sessions:{},jobs:[]};commonRequests.clear();communityRequests.clear();communityAttempts.clear();downloads.clear();manualAccess.clear();
+        await accessUpdates.catch(()=>{});await syncContentScripts();await writes.catch(()=>{});
+        await navigator.locks.request('redflag-preferences-v1',()=>navigator.locks.request('redflag-history-v1',async()=>{const keys=Object.keys(await chrome.storage.local.get(null)).filter(key=>key!==PREFERENCES_STORAGE_KEY);await chrome.storage.local.remove(keys);}));
+        await chrome.storage.session.clear();
+        for(const tab of await chrome.tabs.query({})){if(tab.id!==undefined){await toolbar.update(tab.id);await chrome.tabs.sendMessage(tab.id,{type:'redflag/internal-stop'}).catch(()=>{});}}
+        return {ok:true};
+        }finally{erasingDevice=false;}
+      }
       case 'redflag/chat': return chatAction(message,sender);
       case 'redflag/backend-status':
       case 'redflag/connect-backend': return connectionAction(message,sender);
@@ -493,6 +514,7 @@ chrome.storage.onChanged.addListener((changes,area) => {
   if (area !== 'local' || !changes[PREFERENCES_STORAGE_KEY]) return;
   void initialized.then(async () => {
     const prefs = await preferences();
+    if(prefs.enabled)resetting=false;
     if (!permitsAi(prefs)) for (const controller of controllers) controller.abort();
     if (!prefs.enabled) snapshot.jobs = [];
     else for (const [tab,session] of Object.entries(snapshot.sessions)) for (const review of session.state.documents) {

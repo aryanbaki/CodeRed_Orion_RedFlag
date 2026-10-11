@@ -24,7 +24,7 @@ const server=createAnalysisServer(config,async r=>{analyzeCalls++;const cats=req
 let context:Awaited<ReturnType<typeof chromium.launchPersistentContext>>|undefined;
 try{
  server.listen(0,'127.0.0.1');await once(server,'listening');const baseUrl=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
- context=await chromium.launchPersistentContext(join(root,'profile'),{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`],viewport:{width:400,height:680}});
+ context=await chromium.launchPersistentContext(join(root,'profile'),{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`],viewport:{width:480,height:680}});
  const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');
  await worker.evaluate(({text,baseUrl})=>{const original=globalThis.fetch;globalThis.fetch=async(url,init)=>{const parsed=new URL(String(url));if(parsed.hostname==='127.0.0.1')return original(parsed.port==='8787'?baseUrl+parsed.pathname:url,init);if(parsed.hostname==='service.com'&&['/privacy','/terms','/cookies'].includes(parsed.pathname))return new Response(text,{headers:{'Content-Type':'text/plain'}});return new Response('',{status:404});};},{text,baseUrl});
  await context.route('https://service.com/**',route=>route.fulfill({body:'<h1>Public fixture website</h1><footer><a href="/privacy">Privacy policy</a><a href="/terms">Terms of service</a><a href="/cookies">Cookie policy</a></footer>',contentType:'text/html'}));
@@ -34,7 +34,7 @@ try{
  const connection={baseUrl,accessToken:token,model,fallbackModels:[],promptVersion:'redflag.prompt.v2',rubricVersion:'redflag.rubric.v3'};
  const rejected=await controls.evaluate(async config=>chrome.runtime.sendMessage({type:'redflag/connect-backend',config}),{...connection,accessToken:'invalid-token-but-long-enough-123456'});assert.equal(rejected.connected,false);
  await controls.evaluate(async id=>chrome.tabs.update(id,{active:true}),tabId);await controls.reload();await expect(controls.locator('#domain')).toHaveText('service.com');
- await expect(controls.locator('#connection-status')).toContainText('Backend connected');await controls.locator('#start').click();
+ await expect(controls.locator('#connection-status')).toContainText('Backend connected');await controls.locator('#onboarding-next').click();await controls.locator('#start').click();
  await expect.poll(async()=> (await state())?.documents.filter(d=>d.assessment).length,{timeout:15000}).toBe(3);
  await expect(controls.locator('.policy-row')).toHaveCount(3);for(const card of await controls.locator('.policy-row').all())await expect(card).toBeVisible();
  await expect(controls.locator('.grade-summary .meta')).toContainText('Saved you');
@@ -45,6 +45,7 @@ try{
  const storage=await controls.evaluate(async()=>JSON.stringify(await chrome.storage.local.get(null))+JSON.stringify(await chrome.storage.session.get(null)));assert.ok(!storage.includes(text));assert.ok(!storage.includes('Does my subscription renew?'));assert.ok(!storage.includes(config.apiKey));
  // Reject untrusted content script chat and stale generation.
  const untrusted=await controls.evaluate(async tabId=>{const [r]=await chrome.scripting.executeScript({target:{tabId:tabId!},func:async()=>chrome.runtime.sendMessage({type:'redflag/chat',schemaVersion:1,pageKey:'forged',question:'Question',history:[]})});return r.result;},tabId);assert.equal(untrusted.ok,false);
+ const resetRejected=await controls.evaluate(async tabId=>{const [r]=await chrome.scripting.executeScript({target:{tabId:tabId!},func:async()=>chrome.runtime.sendMessage({type:'redflag/reset-device'})});return r.result;},tabId);assert.equal(resetRejected.ok,false);
  holdChat=true;const chatStarted=new Promise<void>(resolve=>started=resolve),pageKey=(await state())!.pageKey;
  const delayed=controls.evaluate(async pageKey=>chrome.runtime.sendMessage({type:'redflag/chat',schemaVersion:1,pageKey,question:'What else?',history:[]}),pageKey);
  await chatStarted;await site.goto('https://service.com/other');release();const late=await delayed;assert.equal(late.ok,false);assert.equal(late.code,'stale-page');

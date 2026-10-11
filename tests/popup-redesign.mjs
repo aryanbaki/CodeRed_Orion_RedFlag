@@ -10,7 +10,7 @@ const review=(kind,grade='Unrated',status='pending',coverage='unknown')=>({docum
 let context;
 try{
  await mkdir('dist/site-review-v2',{recursive:true});
- context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,viewport:{width:400,height:680},args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
+ context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,viewport:{width:480,height:680},args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(({domain})=>{
   const listeners=[];window.commands=[];window.fixtureState=null;window.connected=false;window.chatCalls=[];
@@ -29,7 +29,7 @@ try{
  await page.goto(`chrome-extension://${id}/popup.html`);await expect(page.locator('#domain')).toHaveText(domain);
  await page.locator('#domain').evaluate(node=>node.textContent='example.com');
  await expect(page.locator('#onboarding')).toBeVisible();await page.screenshot({path:'dist/site-review-v2/01-connect.png',fullPage:true});
- await page.locator('#start').click();await expect(page.locator('#onboarding')).toBeVisible();await expect(page.locator('#connection-status')).toHaveText('Start the RedFlag backend, then retry.');
+ if(await page.locator('#onboarding-next').isVisible())await page.locator('#onboarding-next').click();await page.locator('#start').click();await expect(page.locator('#onboarding')).toBeVisible();await expect(page.locator('#connection-status')).toHaveText('Start the RedFlag backend, then retry.');
  await page.locator('#connection-file').setInputFiles({name:'connection.json',mimeType:'application/json',buffer:Buffer.from('{}')});
  await expect(page.locator('#connection-status')).toContainText('Backend connected');await page.locator('#start').click();await expect(page.locator('#onboarding')).toBeHidden();
  const state=(documents,extra={})=>({schemaVersion:1,pageKey:'fixture',pageUrl:`https://${domain}/signup`,context:'signup',documents,updatedAt:now,...extra});
@@ -42,14 +42,14 @@ try{
  await page.locator('#flags-content summary').click();await expect(page.locator('#flags-content blockquote')).toHaveText(quote);
  for(const [index,kind] of ['privacy','cookies','terms'].entries()){await page.locator('.analyze-policy').nth(index).click();await expect.poll(()=>page.evaluate(()=>window.commands.at(-1)?.documentId)).toBe(kind);}
  await page.evaluate(()=>window.commands=[]);await page.locator('#recheck').click();await expect.poll(()=>page.evaluate(()=>window.commands.map(c=>c.mode).join(','))).toBe('recheck');
- await page.locator('#tab-summary').click();await expect(page.locator('#panel-summary')).toBeVisible();await expect(page.locator('#summary-content')).toContainText('In your favor');await expect(page.locator('#summary-content')).not.toContainText('score');await page.locator('.overall-copy h2').evaluate(n=>n.textContent='Example');await page.screenshot({path:'dist/site-review-v2/04-summary.png',fullPage:true});
+ await page.locator('#tab-summary').click();await expect(page.locator('#panel-summary')).toBeVisible();await expect(page.locator('#summary-content')).toContainText('Working in your favor');await expect(page.locator('#summary-content')).not.toContainText('score');await page.locator('.overall-copy h2').evaluate(n=>n.textContent='Example');await page.screenshot({path:'dist/site-review-v2/04-summary.png',fullPage:true});
  await page.locator('#tab-chat').click();await page.locator('#chat-input').fill('Does my subscription renew?');await page.locator('#chat-send').click();await expect(page.locator('.chat-bubble.assistant')).toContainText('Your subscription renews');await expect(page.locator('#chat-model')).toContainText('gemini-test');
  await page.locator('.overall-copy h2').evaluate(n=>n.textContent='Example');await page.screenshot({path:'dist/site-review-v2/05-chat.png',fullPage:true});await page.locator('.chat-bubble.assistant summary').click();await expect(page.locator('.chat-bubble.assistant blockquote')).toHaveText('[1] '+quote);
  await page.evaluate(()=>window.chatFail=true);await page.locator('#chat-input').fill('A follow-up question');await page.locator('#chat-input').press('Enter');await expect(page.locator('#chat-status')).toContainText('Gemini limit reached');await expect(page.locator('#chat-input')).toHaveValue('A follow-up question');await expect(page.locator('.chat-bubble.assistant')).toHaveCount(1);
  await page.evaluate(s=>window.setFixture(s),state([],{pageKey:'new-generation'}));await expect(page.locator('.chat-bubble')).toHaveCount(0);await expect(page.locator('#chat-model')).not.toContainText('Powered by');
  await page.locator('#tab-chat').focus();await page.keyboard.press('Home');await expect(page.locator('#tab-flags')).toBeFocused();await expect(page.locator('#panel-flags')).toBeVisible();
  await page.evaluate(s=>window.setFixture(s),state(['privacy','terms','cookies'].map(kind=>review(kind))));await expect(page.locator('.analyze-policy').first()).toBeDisabled();
- await page.locator('#settings-link').click();await expect(page.locator('#settings')).toHaveAttribute('open','');await page.locator('#setup').click();await page.locator('#community-only').click();await expect(page.locator('#ai-state')).toHaveText('Community ratings only');
+ await page.locator('#settings-link').click();await expect(page.locator('#settings')).toHaveAttribute('open','');await page.locator('#setup').click();await page.locator('#onboarding-next').click();await page.locator('#community-only').click();await expect(page.locator('#ai-state')).toHaveText('Community ratings only');
  const unavailable={...review('privacy','Unrated','unrated','complete'),reason:'ai-consent-required',failure:{stage:'analysis',code:'ai-consent-required',message:'Background AI is disabled. No new document text was sent.'}};
  await page.evaluate(async ({unavailable,now})=>{const d={...unavailable,document:{...unavailable.document,url:'https://www.figma.com/privacy',label:'Privacy policy'}};await chrome.storage.local.set({'redflag.history.v1':{schemaVersion:1,sites:[{origin:'https://www.figma.com',firstCheckedAt:now,lastCheckedAt:now,generation:'figma-unknown',context:'browsing',documents:[d]}],deleted:[]}});},{unavailable,now});
  await expect(page.locator('.recent-item')).toContainText('www.figma.com');await expect(page.locator('.recent-item .document-grade')).toHaveText('?');await expect(page.locator('.recent-item svg')).toHaveCount(0);
@@ -57,6 +57,6 @@ try{
  await page.evaluate(()=>{document.querySelector('.overall-copy h2').textContent='Figma';document.querySelector('#domain').textContent='www.figma.com';});await page.screenshot({path:'dist/site-review-v2/06-unknown.png',fullPage:true});
 await page.locator('.analyze-policy').first().click();await expect(page.locator('#onboarding')).toBeVisible();
  await page.evaluate(()=>document.fonts.ready);if(!await page.evaluate(()=>[...document.fonts].some(face=>face.family==='Merriweather'&&face.status==='loaded')))throw Error('Merriweather font did not load');
- const metrics=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>400,logo:document.querySelector('.brand-logo').naturalWidth}));if(metrics.overflow||metrics.logo!==128)throw Error(JSON.stringify(metrics));if(errors.length)throw Error(errors.join('; '));
+ const metrics=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>480,logo:document.querySelector('.brand-logo').naturalWidth}));if(metrics.overflow||metrics.logo!==128)throw Error(JSON.stringify(metrics));if(errors.length)throw Error(errors.join('; '));
  console.log('Popup verified: checked setup, always-visible policy cards, Analyze all/individual, evidence, Summary, Chat, citation expansion, quota retry, navigation reset, keyboard tabs, no horizontal overflow. Screenshot data are fixtures.');
 }finally{await context?.close();await rm(profile,{recursive:true,force:true});}

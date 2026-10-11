@@ -69,3 +69,7 @@ P0 exit: the supported fixtures pass the complete discovery → background retri
 ## Proactive UI branch verification
 
 The `codex/proactive-ui` branch implements shared-contract document rendering, settings, and revocable AI consent. `npm run check`, `npm run test:ui`, `npm run test:browser`, and `git diff --check` pass locally on 2026-10-11. Proactive result tests use synthetic fixtures; popup tests load the actual unpacked standalone extension. These checks do not certify live discovery, backend transmission cancellation, or Gemini quality. See [UI checks and integration instructions](proactive-ui.md) for cases, changed components, and remaining integration work.
+
+## Combined discovery/UI integration verification
+
+Integrated both worker implementations on main on 2026-10-11. Type checks, 20 unit cases, the discovery browser suite, UI fixture suite, and unpacked-popup suite passed. The discovery suite mounts the actual overview automatically and checks dynamic links, per-document failures, revocation, unchanged consent controls, navigation generations, and worker suspension/recovery. Retrieval and AI transport in this suite are controlled responses, not live providers. Removed the standalone no-op UI bridge so the main build requires the real overview. An integration correction preserves the too-large reason for oversized extracted text. Backend/live-provider and complete HTML grading gates remain open.

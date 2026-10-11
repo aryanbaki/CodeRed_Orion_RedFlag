@@ -16,6 +16,7 @@ export interface ProcessorDependencies {
   cachePut: (key:string,entry:CacheEntry) => Promise<void>;
 }
 export function failureReason(error: unknown): UnratedReason {
+  if (error instanceof Error && error.message === 'oversized') return 'too-large';
   if (error instanceof RetrievalError) return ({'permission-denied':'permission-required','redirect-unverified':'inaccessible','unsupported-content':'unsupported','oversized':'too-large'} as Record<string,UnratedReason>)[error.reason] ?? error.reason as UnratedReason;
   const allowed: UnratedReason[] = ['quota','timeout','invalid-response','unsafe-url','network-error','authentication-required','incomplete','too-large','inaccessible','unsupported','ai-consent-required'];
   return error instanceof Error && allowed.includes(error.message as UnratedReason) ? error.message as UnratedReason : 'network-error';

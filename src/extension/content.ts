@@ -1,7 +1,7 @@
 import {observeLegalLinks, type DiscoveredLink} from '../discovery/dom.ts';
 import {safePageUrl, validPreferences} from '../background/validation.ts';
 import {createDefaultPreferences, type DiscoveredDocument, type ExtensionResponse, type ReviewState, type RedFlagPreferences, type OverviewController} from '../core/contracts.ts';
-// Agent 3 supplies this module on integration; a build-time adapter keeps this branch independently testable.
+// Proactive overview mounts automatically on supported legal-link discovery.
 import {mountOverview} from '../ui/overview.ts';
 let controller:OverviewController | undefined;
 let dismissed = false;

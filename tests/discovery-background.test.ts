@@ -4,7 +4,7 @@ import {publicDocumentUrl,exactDomain} from '../src/discovery/urls.ts';
 import {retrievePublicDocument,RetrievalError} from '../src/background/retrieval.ts';
 import {contentHash,cacheIdentity,applicableCache,currentCommunity,type CacheEntry} from '../src/background/cache.ts';
 import {lookupCommunity,parseCommunityCatalog} from '../src/background/community.ts';
-import {processDocument,type ProcessorDependencies} from '../src/background/processor.ts';
+import {processDocument,failureReason,type ProcessorDependencies} from '../src/background/processor.ts';
 import {pendingState,permitsAi,validateDiscovery,validateAssessment} from '../src/background/validation.ts';
 import {createDefaultPreferences,type AnalysisDocument,type DocumentAssessment,type CommunityReference} from '../src/core/contracts.ts';
 const url = 'https://service.com/terms';
@@ -104,4 +104,8 @@ test('invalid cache evidence is discarded before consented fallback',async () =>
   let calls=0,latest=review();
   await processDocument(review(),'service.com',deps({preferences:async()=>prefs,cacheGet:async()=>invalid,analyze:async()=>{calls++;return assessment;}}),async r=>{latest=r;});
   assert.equal(calls,1);assert.equal(latest.cached,false);assert.equal(latest.grade,'D');
+});
+
+test('oversized extracted legal text retains its specific Unrated reason', () => {
+  assert.equal(failureReason(new Error('oversized')), 'too-large');
 });

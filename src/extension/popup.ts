@@ -15,15 +15,16 @@ applyTheme();
 const get=<T extends HTMLElement=HTMLElement>(id:string)=>document.querySelector<T>('#'+id)!;
 let preferences:Awaited<ReturnType<typeof loadPreferences>>,state:ReviewState|null=null,pageUrl:string|null=null,busy=false,connected=false,siteName='This site',chatBusy=false,chatGeneration=0;
 let customInterests:string[]=[],chosenInterests=new Set<import('../core/contracts.ts').RiskCategory>();
-let chatHistory:ChatTurn[]=[],selectedTab='flags';
+let chatHistory:ChatTurn[]=[],selectedTab='flags',analysisStarted=false;
 const busyIds=new Set<string>(),onboardingKey='redflag.onboarding.v1';
 const recent=mountRecentItems(get('recent-items'),[],origin=>void chrome.tabs.create({url:chrome.runtime.getURL('dashboard.html')+'#site='+encodeURIComponent(origin)}));
 async function refreshSites(){try{recent.update(await listHistory());}catch{get('recent-items').textContent='Sites unavailable.';}}
 subscribeHistory(()=>void refreshSites());
 function acceptState(next:ReviewState|null){
  if(next?.pageUrl!==pageUrl)return;
- if(state&&state.pageKey!==next.pageKey){chatHistory=[];chatGeneration++;chatBusy=false;get('chat-messages').replaceChildren();get('chat-status').textContent='';get('chat-model').textContent='Ask about this site’s policies';}
+ if(state&&state.pageKey!==next.pageKey){chatHistory=[];chatGeneration++;chatBusy=false;analysisStarted=false;get('chat-messages').replaceChildren();get('chat-status').textContent='';get('chat-model').textContent='Ask about this site’s policies';}
  state=next;
+ if(summarizeReview(next).grade!=='Unrated'||next.documents.some(d=>d.assessment))analysisStarted=true;
  if(next.documents.length&&/^(No public policies|Still looking for policies)/.test(get('action-status').textContent??''))get('action-status').textContent='';
 }
 function citedCard(f:EvidenceFinding&{policyLabel?:string},benefit=false){
@@ -70,10 +71,11 @@ async function saveInterests(skip=false){
 
 function paint(){
  if(!preferences)return;
- get<HTMLInputElement>('review-enabled').checked=preferences.enabled;
- get('ai-state').textContent=preferences.aiConsent.enabled?connected?'Gemini connected':'Gemini connection needed':'Community ratings only';
  const scanning=busy||Boolean(state?.discoveryPending);
- get('no-policies').hidden=Boolean(scanning||!pageUrl||state?.documents.length);get('add-policy').hidden=!pageUrl;
+ get('no-policies').hidden=Boolean(scanning||!pageUrl||state?.documents.length);
+ const showInsights=analysisStarted||summarizeReview(state).grade!=='Unrated';
+ get('tab-flags').parentElement!.hidden=!showInsights;
+ for(const tab of tabs)get('panel-'+tab).hidden=!showInsights||tab!==selectedTab;
  get('loading').hidden=!scanning;get('compact-review').hidden=!pageUrl;
  if(pageUrl)renderPopupReview(get('compact-review'),state,preferences,id=>void analyzePolicy(id),busyIds,()=>void analyzeAll(),busy,siteName);
  get<HTMLButtonElement>('chat-send').disabled=chatBusy||!pageUrl||!preferences.enabled;
@@ -90,13 +92,13 @@ async function scan(){
 }
 async function analyzePolicy(documentId:string){
  if(!state||busyIds.has(documentId)||!canAnalyze())return;
- const pageKey=state.pageKey;busyIds.add(documentId);get('action-status').textContent='';paint();
+ const pageKey=state.pageKey;analysisStarted=true;busyIds.add(documentId);get('action-status').textContent='';paint();
  try{const result=await requestAnalysis({type:'redflag/analyze',mode:'one',pageKey,documentId});if(result.ok&&state?.pageKey===pageKey)acceptState(result.state);else if(!result.ok)get('action-status').textContent=result.error;}
  catch{get('action-status').textContent='Could not start analysis. Try again.';}finally{busyIds.delete(documentId);paint();}
 }
 async function analyzeAll(){
  if(busy||!canAnalyze())return;
- await scan();if(!state?.documents.length){get('action-status').textContent=state?.discoveryPending?'Still looking for policies…':'No public policies found.';return;}
+ analysisStarted=true;paint();await scan();if(!state?.documents.length){get('action-status').textContent=state?.discoveryPending?'Still looking for policies…':'No public policies found.';return;}
  const pageKey=state.pageKey;
  try{const result=await requestAnalysis({type:'redflag/analyze',mode:'recheck',pageKey});if(result.ok&&state?.pageKey===pageKey){acceptState(result.state);paint();}else if(!result.ok)get('action-status').textContent=result.error;}
  catch{get('action-status').textContent='Could not start analysis. Try again.';}
@@ -125,13 +127,7 @@ async function sendChat(){
  }catch{if(generation===chatGeneration)get('chat-status').textContent='Gemini could not answer. Try again.';}
  finally{if(generation===chatGeneration){chatBusy=false;paint();}}
 }
-get('settings-link').addEventListener('click',()=>{get<HTMLDetailsElement>('settings').open=!get<HTMLDetailsElement>('settings').open;get('settings').scrollIntoView();});
-get('open-summary').addEventListener('click',()=>void chrome.tabs.create({url:chrome.runtime.getURL('dashboard.html')}));
-get('setup').addEventListener('click',()=>{chosenInterests=new Set(preferences.priorities);paintInterests();get('onboarding').hidden=false;get('interest-step').hidden=false;get('consent-step').hidden=true;get('onboarding').scrollIntoView();});
 get('find-policies').addEventListener('click',()=>void (async()=>{busy=true;paint();try{const result=await chrome.runtime.sendMessage({type:'redflag/rescan-policies'});if(result?.ok)acceptState(result.state);else get('action-status').textContent=result?.error??'Could not check this site.';}finally{busy=false;paint();}})());
-get('review-page').addEventListener('click',()=>{get<HTMLInputElement>('policy-url').value=pageUrl??'';get<HTMLSelectElement>('policy-kind').value='unknown';get<HTMLInputElement>('policy-url').focus();});
-get('policy-form').addEventListener('submit',event=>{event.preventDefault();void (async()=>{if(!canAnalyze())return;await scan();if(!state)return;const button=get<HTMLButtonElement>('add-policy-submit');button.disabled=true;try{const result=await chrome.runtime.sendMessage({type:'redflag/add-policy',pageKey:state.pageKey,url:get<HTMLInputElement>('policy-url').value,kind:get<HTMLSelectElement>('policy-kind').value});if(result?.ok){acceptState(result.state);get<HTMLInputElement>('policy-url').value='';}else get('action-status').textContent=result?.error??'Could not add this policy.';}catch{get('action-status').textContent='Could not add this policy.';}finally{button.disabled=false;paint();}})();});
-get('device-vault').addEventListener('click',()=>void chrome.tabs.create({url:chrome.runtime.getURL('data.html')}));
 get('onboarding-next').addEventListener('click',()=>void saveInterests());get('skip-interests').addEventListener('click',()=>void saveInterests(true));
 get('add-interest').addEventListener('click',()=>{const input=get<HTMLInputElement>('custom-interest');if(customInterests.length>=5){get('interest-status').textContent='Choose up to five custom interests.';return;}customInterests=normalizeCustomInterests([...customInterests,input.value]);input.value='';paintInterests();});
 get('connect').addEventListener('click',()=>get<HTMLInputElement>('connection-file').click());
@@ -149,7 +145,6 @@ async function finishSetup(ai:boolean){
 }
 get('retry-connection').addEventListener('click',()=>void (async()=>{get('connection-status').textContent='Connecting…';const result=await chrome.runtime.sendMessage({type:'redflag/backend-status'});connected=result?.connected===true;get('connection-status').textContent=connected?'Connected.':result?.error??'Connection unavailable.';paint();})());
 get('start').addEventListener('click',()=>void finishSetup(true));get('community-only').addEventListener('click',()=>void finishSetup(false));
-get('review-enabled').addEventListener('change',()=>void (async()=>{preferences={...preferences,enabled:get<HTMLInputElement>('review-enabled').checked};await savePreferences(preferences);paint();if(preferences.enabled)await scan();})());
 chrome.runtime.onMessage.addListener(message=>{if(message?.type==='redflag/state'&&message.state?.schemaVersion===1&&message.state.pageUrl===pageUrl){acceptState(message.state);paint();}});
 chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes[PREFERENCES_STORAGE_KEY]){preferences=normalizePreferences(changes[PREFERENCES_STORAGE_KEY].newValue,undefined,new Date().toISOString());paint();}});
 void (async()=>{

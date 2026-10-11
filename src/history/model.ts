@@ -43,12 +43,13 @@ function assessment(raw:unknown,document:DocumentReview['document']):DocumentAss
   if (a.documentId!==document.id || source(a.documentUrl)!==document.url || a.kind!==document.kind || !date(a.analyzedAt) ||
     !['gemini','community'].includes(a.provider) || !['complete','partial','unknown'].includes(a.coverage) ||
     !['A','B','C','D','E','F','Unrated'].includes(a.grade) || !Array.isArray(a.findings)) return;
-  const findings=a.findings.slice(0,12).flatMap(f=>{
+  const findings=a.findings.slice(0,30).flatMap(f=>{
     if(!f || !categories.includes(f.category) || !['low','medium','high'].includes(f.severity) || source(f.sourceUrl)!==document.url || typeof f.quote!=='string' || f.quote.length>2000) return [];
     return [{id:text(f.id,100),category:f.category,severity:f.severity,title:text(f.title,200),explanation:text(f.explanation,2000),quote:f.quote,sourceUrl:document.url}];
   });
-  return {documentId:document.id,documentUrl:document.url,kind:document.kind,grade:a.grade,coverage:a.coverage,findings,summary:text(a.summary,2000),
-    reason:reasons.includes(a.reason!)?a.reason:undefined,provider:a.provider,analyzedAt:date(a.analyzedAt)!,model:text(a.model,200)||undefined,
+  const evidenceIncomplete=findings.length!==a.findings.length;
+  return {documentId:document.id,documentUrl:document.url,kind:document.kind,grade:evidenceIncomplete?'Unrated':a.grade,coverage:evidenceIncomplete?'partial':a.coverage,findings,summary:text(a.summary,2000),
+    reason:evidenceIncomplete?'incomplete':reasons.includes(a.reason!)?a.reason:undefined,provider:a.provider,analyzedAt:date(a.analyzedAt)!,model:text(a.model,200)||undefined,
     promptVersion:text(a.promptVersion,100),rubricVersion:text(a.rubricVersion,100),contentHash:text(a.contentHash,64)};
 }
 function documentReview(raw:unknown,index:number):DocumentReview | undefined {

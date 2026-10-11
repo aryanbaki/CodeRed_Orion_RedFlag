@@ -37,6 +37,9 @@ try {
   assert.ok((await dashboard.getByRole('link',{name:'Evidence source'}).first().getAttribute('href')).startsWith('https://public-policies.com/'));
   await dashboard.getByText('ToS;DR community reference · stale').click();await expect(dashboard.getByText(/Fixture: ToS;DR contributors/)).toBeVisible();
   await dashboard.screenshot({path:'dist/screenshots/my-sites-detail.png',fullPage:true});
+  await dashboard.getByRole('button',{name:'Re-check site',exact:true}).click();
+  await expect(dashboard.locator('#status')).toContainText(/queued|unavailable|invalid/i);
+  await expect(dashboard.getByRole('button',{name:'Re-check site',exact:true})).toBeEnabled();
   const update=state();update.updatedAt=new Date(Date.now()+1000).toISOString();update.documents[1]=doc('privacy','Unrated',true);
   await helperPage.evaluate(s=>testHistory.recordReview(s),update);
   await expect(dashboard.getByText('Grade: Unrated',{exact:true})).toHaveCount(2);

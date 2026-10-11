@@ -1,0 +1,43 @@
+# Local My Sites and settings dashboard
+
+Owned by Agent 3 on `codex/my-sites-dashboard`, starting from local main `d306957` in its own worktree. No main merge, popup edits, background edits, extra permissions, accounts, passwords, cloud sync, billing, or second analysis pipeline.
+
+## Integration and API
+
+Own commits in order: `e057165` (initial history/recent component), `02fcffc` (requireExisting and safe metadata), `14d6eef` (dashboard/build/tests), plus the final handoff/polish commit. Shared dependencies are Agent 1's `be64490` (theme; cherry-picked here as `885045c`) and Agent 2's `c96d1fe` (commands/summary/failure; here `a651468`). Integration should apply shared commits once and then these own commits. Package script additions from other branches must be preserved when resolving any package.json conflict.
+
+- `src/history/store.ts`: `recordReview(state: ReviewState, options?: {requireExisting?: boolean}): Promise<void>`, `listHistory(): Promise<CheckedSite[]>`, `getHistory(origin): Promise<CheckedSite | undefined>`, `deleteHistory(origin)`, `clearHistory()`, `subscribeHistory(callback): () => void`.
+- `CheckedSite`: `{origin, firstCheckedAt, lastCheckedAt, generation, context, documents: DocumentReview[]}`. `generation` is the worker pageKey; a saved review uses no original page path. `src/history/model.ts` exports `reviewFromSite(site): ReviewState` when the worker needs a canonical snapshot.
+- `createHistoryApi(storage, lock, now?)` provides an injectable test surface. All actual trusted extension contexts serialize mutations with the same browser Web Lock (`redflag-history-v1`). Browser restarts release abandoned locks; committed Chrome local storage survives.
+- Agent 2 must call `recordReview` only for checked-review updates and catch storage errors separately from the analysis path. Every detached saved-site recheck publish uses `recordReview(state, {requireExisting:true})`, so deleting a site during recheck cannot resurrect it. Live reviews use the default behavior. Same-generation deletion tombstones suppress late live updates; a deliberate fresh live generation may create a newly checked site.
+- `src/ui/recent-items.ts`: `mountRecentItems(container, items: CheckedSite[], onOpen: (origin:string) => void)` returns `{update(items), destroy()}`. Shows the top five stored reviews, individual policy grades or Pending/Unrated, and a real empty state. Caller owns loading/read errors and `subscribeHistory`. Agent 1 mounts this in the popup; no fake items are inserted.
+- Full-tab routes: `chrome.runtime.getURL('dashboard.html') + '#sites'`, `'#settings'`, and `'#site=' + encodeURIComponent(site.origin)`. The dashboard requests Agent 2's typed `requestAnalysis({type:'redflag/recheck-site', siteOrigin})`. The worker loads authoritative stored documents and queues its existing processor. This branch reports action unavailability when that worker isn't integrated; it never fetches or analyzes on its own.
+- Dashboard build registration consists only of an esbuild entry and copies for dashboard.html/css. No manifest registration or new permissions are necessary for a trusted extension tab. Agent 1's popup navigation opens these routes.
+
+## Privacy, storage and settings
+
+Chrome local key `redflag.history.v1` holds a v1 allowlisted schema. Store only checked-site origins, generation/update metadata, independent sanitized public-document reviews, supported evidence excerpts, source attribution and dates. Original page paths, URL queries/fragments, credentials, form fields, unrelated page text and general browsing history are not stored. Arbitrary labels become fixed policy labels. Unsafe/query-bearing document URLs remain independent Unrated entries with an empty stored URL and no assessment; no sensitive URL is retained. Provider HTML is never rendered.
+
+Limits: 30 days, 50 sites, 1 MB UTF-8 serialized history, at most 24 documents/site, 30 findings/document, four community references/document, 2,000-character quotations and explanations. If sanitization omits evidence, the stored assessment becomes partial/Unrated rather than retaining a reassuring grade. Expired/invalid cached grades also become Unrated through the shared helper. Oldest reviews are evicted when count/byte limits apply. Pruning occurs on review writes and list reads; no separate general-browsing watcher or always-running retention service is introduced. A very large single review can be evicted by the byte cap.
+
+Delete/clear touches only the history key, preserving preferences, AI consent, permissions and the analysis cache. Bounded tombstones retain checked origin/generation metadata up to 30 days to prevent late worker publishes restoring deleted reviews; they do not contain evidence. A deliberate new check can appear again. This behavior is disclosed here so deletion is not represented as erasing every trace of a previously checked origin. Unknown data versions are preserved and reported as unsupported until the user explicitly clears history. Corrupt individual entries are discarded; no secrets from unrecognized fields are copied. Failed writes reject with an actionable error and the UI retains the previous committed state.
+
+Settings reuse `redflag.preferences.v1`, `loadPreferences`, `changeConsent`, `savePreferences`, and the existing full AI transmission disclosure. Changes reload the latest value inside `redflag-preferences-v1` before applying only the chosen setting. Agent 1 uses the same lock to avoid cross-surface lost updates. Chrome storage events synchronize popup/dashboard choices. Consent requires affirmative input and persists the current notice version/granted date; revocation makes no claim to recall sent requests. Reading permissions remain separate and are managed by the popup; the dashboard adds none.
+
+## Visual direction and font
+
+Inspected the requested 02-popup-direction, 06-discovery-and-recent, 07-settings, and 08-monoglyphic-specimen PNGs. The supplied detailed RedFlag logo is unchanged. Dashboard uses Agent 1's shared dark surfaces and restrained red accents; the account screen informs panel/navigation styling only. Per-document grades remain independent; service community ratings never become policy grades.
+
+**Monoglyphic is unavailable and unfinished here.** No authorized distributable font file or app-embedding permission was supplied. Shared temporary stack: `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`. No downloaded font, remote font request, fake Monoglyphic declaration or unlicensed embedding is included. See `docs/design/typography.md`.
+
+## Verification and screenshots
+
+- `npm run check`: TypeScript, 27 tests (six new history cases), production extension build.
+- `npm run test:dashboard`: actual unpacked Chromium extension, real Chrome local storage, dashboard and existing popup. Fixture reviews explicitly identify simulated evidence/provider data. Covers empty history, two sites, independent Terms D/Privacy B/Additional Unrated, partial evidence, community review dates/attribution, source links, updated reviews, bidirectional consent/priorities, 1280/720/480 px widths without horizontal overflow, skip-link and keyboard checkbox use, storage-write failure during deletion, full browser/profile restart, deletion, clear and preservation of settings. Temporary helper files/profile/build are removed; real production bundle has no test seeding code.
+- Existing `test:browser`, `test:ui`, and `test:discovery-browser` also run; live provider behavior remains outside this branch's fixture validation.
+- Screenshots generated by the reproducible suite under ignored `dist/screenshots/`: `my-sites-empty.png`, `my-sites-list.png`, `my-sites-detail.png`, `my-sites-settings.png`, `my-sites-settings-720.png`. List/detail/settings inspected visually. Screenshots show labeled fixture results, not actual university/service ratings.
+- `git diff --check` passes.
+
+## Remaining limitations
+
+History snapshots group by exact origin (HTTP/HTTPS and subdomains separate); they are not a comprehensive policy-version archive. Only latest review per checked origin is shown; pending saved snapshots can remain pending until a live worker resumes or the user rechecks. Document access and AI infrastructure limits are inherited unchanged. Real Gemini/network validation, store distribution/accessibility audit, licensed Monoglyphic acquisition and integration-wide recheck tests remain the respective worker/coordinator gates. Search/filter are omitted from P0. There is no cloud copy, account or export feature.

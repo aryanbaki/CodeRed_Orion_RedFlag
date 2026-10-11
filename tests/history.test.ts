@@ -43,3 +43,8 @@ test('retention, count and byte caps bound history; unknown fields and unsafe UR
   const raw=state() as ReviewState & {formFields?:string;credentials?:string};raw.formFields='private-form';raw.credentials='private-token';raw.documents[0].document.url+='?token=secret';raw.documents[1].document.label='private name';
   const clean=snapshotReview(raw),serialized=JSON.stringify(clean);assert.equal(clean.documents[0].grade,'Unrated');assert.equal(clean.documents[0].reason,'unsafe-url');assert.ok(!serialized.includes('token=secret'));assert.ok(!serialized.includes('private name'));assert.ok(!serialized.includes('private-form'));assert.ok(!serialized.includes('private-token'));
 });
+test('stale grades and trimmed evidence never become fresh reassuring grades; failure text is derived',()=>{
+  const review=state();review.documents[0].freshness.cacheExpiresAt='2000-01-01T00:00:00Z';assert.equal(snapshotReview(review).documents[0].grade,'Unrated');
+  const huge=state();huge.documents[0].assessment!.findings[0].quote='x'.repeat(2001);const clean=snapshotReview(huge);assert.equal(clean.documents[0].grade,'Unrated');assert.equal(clean.documents[0].reason,'incomplete');
+  const failed=state();failed.documents[0].failure={stage:'analysis',code:'authentication-required',message:'secret injected message',retryAfterSeconds:Infinity};const saved=snapshotReview(failed).documents[0];assert.ok(saved.failure!.message.includes('analysis')||saved.failure!.message.includes('Analysis'));assert.equal(saved.failure!.retryAfterSeconds,undefined);assert.ok(!JSON.stringify(saved).includes('secret injected message'));
+});

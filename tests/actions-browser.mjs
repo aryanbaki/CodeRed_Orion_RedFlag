@@ -47,6 +47,17 @@ try {
  await expect.poll(async()=> (await state()).documents.every(d=>d.status==='ready')).toBe(true);
  assert.equal(await worker.evaluate(()=>maximum),2);
  await expect.poll(()=>worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),tabId)).toBe('E');
+ // Exercise the real popup controls against the actual worker, keeping the site tab active.
+ await controls.evaluate(async tabId=>chrome.tabs.update(tabId,{active:true}),tabId);
+ await controls.reload();
+ await expect(controls.locator('#compact-review')).toContainText('2 of 2');
+ await controls.getByRole('button',{name:'Analyze Terms of Service',exact:true}).click();
+ await expect.poll(async()=> (await state()).documents.every(d=>d.status==='ready')).toBe(true);
+ await controls.locator('#analyze-all').click();
+ await expect.poll(async()=> (await state()).documents.every(d=>d.status==='ready')).toBe(true);
+ await controls.locator('#recheck').click();
+ await expect.poll(async()=> (await state()).documents.every(d=>d.status==='ready')).toBe(true);
+ await expect(controls.locator('#recent-items')).toContainText('service.com');
  const before=await worker.evaluate(()=>requests.filter(r=>r.body).length);const oneId=(await state()).documents[0].document.id;
  assert.equal((await action('one',oneId)).ok,true);await expect.poll(async()=> (await state()).documents.every(d=>d.status==='ready')).toBe(true);
  assert.equal(await worker.evaluate(()=>requests.filter(r=>r.body).length),before);

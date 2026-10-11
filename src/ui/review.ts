@@ -77,7 +77,7 @@ export function renderReview(container: HTMLElement, state: ReviewState, prefere
     card.append(element('h3',`${names[review.document.kind]} — ${review.document.label}`,undefined,doc));
     card.append(element('p', `Grade: ${visibleGrade(review)}${review.status === 'pending' ? ' · Pending' : ''}`, 'grade', doc));
     const source = safeLink('Source document',review.document.url,doc); source.dataset.key = `source:${review.document.id}`; card.append(source);
-    if (review.status !== 'ready' || visibleGrade(review) === 'Unrated') card.append(element('p', reasonLabels[review.reason ?? a?.reason ?? 'insufficient-evidence'] ?? 'This document remains Unrated.', 'uncertain', doc));
+    if (review.status !== 'ready' || visibleGrade(review) === 'Unrated') card.append(element('p', (review.failure?.message ?? reasonLabels[review.reason ?? a?.reason ?? 'insufficient-evidence']) ?? 'This document remains Unrated.', 'uncertain', doc));
     if (a?.summary) card.append(element('p',a.summary,undefined,doc));
     card.append(element('p', `Coverage: ${review.coverage}. Provider: ${a ? (a.provider === 'gemini' ? 'Google Gemini' : 'Community reference (not an AI grade)') : 'No document assessment'}. ${review.cached ? 'Cached result.' : ''}`, 'meta', doc));
     card.append(element('p', `Document updated: ${dateLabel(review.freshness.documentUpdatedAt)}. Retrieved: ${dateLabel(review.freshness.retrievedAt)}. Analyzed: ${dateLabel(a?.analyzedAt ?? review.freshness.analyzedAt)}. Cache expiry: ${dateLabel(review.freshness.cacheExpiresAt)}.`, 'meta', doc));

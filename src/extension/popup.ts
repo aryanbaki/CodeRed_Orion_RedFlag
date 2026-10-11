@@ -1,3 +1,9 @@
+import {applyTheme} from '../ui/theme.ts';
+import {renderPopupReview} from '../ui/popup-review.ts';
+import {requestAnalysis,type AnalysisMode} from '../core/analysis-actions.ts';
+import {listHistory,subscribeHistory} from '../history/store.ts';
+import {mountRecentItems} from '../ui/recent-items.ts';
+applyTheme();
 import {validateDocument} from '../core/evidence.ts';
 import {PREFERENCES_STORAGE_KEY, type ExtensionResponse, type ReviewState, type RiskCategory} from '../core/contracts.ts';
 import {demoDocument, demoFindings} from '../providers/demo.ts';
@@ -20,6 +26,26 @@ let state: ReviewState | null = null;
 let activePageUrl: string | null = null;
 let demoVisible = false;
 let saving = false;
+let actionBusy=false;
+const allButton=document.querySelector<HTMLButtonElement>('#analyze-all')!;
+const recheckButton=document.querySelector<HTMLButtonElement>('#recheck')!;
+async function analyze(mode:AnalysisMode,documentId?:string) {
+  if(!state || actionBusy || !preferences?.aiConsent.enabled) return;
+  actionBusy=true;paint();
+  try {const response=await requestAnalysis({type:'redflag/analyze',mode,pageKey:state.pageKey,...(documentId ? {documentId} : {})});
+    if(response.ok && response.state.pageKey===state.pageKey) {state=response.state;paint();document.querySelector('#action-status')!.textContent='Analysis queued. Results update independently.';}
+    else if(!response.ok) document.querySelector('#action-status')!.textContent=response.error;
+  } catch {document.querySelector('#action-status')!.textContent='Could not queue analysis. Try again.';} finally {actionBusy=false;paint();}
+}
+allButton.addEventListener('click',()=>void analyze('all'));
+recheckButton.addEventListener('click',()=>void analyze('recheck'));
+function openSummary(origin?:string) {void chrome.tabs.create({url:chrome.runtime.getURL('dashboard.html')+(origin ? '#site='+encodeURIComponent(origin) : '')});}
+document.querySelector('#open-summary')!.addEventListener('click',()=>openSummary(activePageUrl ? new URL(activePageUrl).origin : undefined));
+document.querySelector('#settings-link')!.addEventListener('click',event=>{event.preventDefault();const settings=document.querySelector<HTMLDetailsElement>('#settings')!;settings.open=true;settings.scrollIntoView();settings.querySelector('summary')!.focus();});
+const recent=mountRecentItems(document.querySelector('#recent-items')!,[],openSummary);
+async function refreshRecent() {try {recent.update(await listHistory());}catch {document.querySelector('#recent-items')!.textContent='Local checked-site history is unavailable.';}}
+subscribeHistory(()=>void refreshRecent());
+void refreshRecent();
 const boxes: HTMLInputElement[] = [];
 aiToggle.disabled=true;
 const demoButton=document.querySelector<HTMLButtonElement>('#demo')!; demoButton.disabled=true;
@@ -46,17 +72,22 @@ function renderDemo() {
 }
 function paint() {
   if (!preferences) return;
-  boxes.forEach(b=>{b.checked=preferences.priorities.includes(b.value as RiskCategory);b.disabled=saving;}); enabled.checked=preferences.enabled; enabled.disabled=saving;
+  boxes.forEach(b=>{if(!saving) b.checked=preferences.priorities.includes(b.value as RiskCategory);b.disabled=saving;}); if(!saving) enabled.checked=preferences.enabled; enabled.disabled=saving;
   aiToggle.disabled=saving; demoButton.disabled=false;
   aiToggle.textContent=preferences.aiConsent.enabled ? 'Turn off background AI analysis' : 'Enable background AI analysis';
   aiState.textContent=preferences.aiConsent.enabled ? 'On. Public legal documents may be analyzed automatically in the background.' : 'Off. New AI transmissions are disabled. Local and community results may still be available.';
   if (state) renderReview(results,state,preferences,status);
+  renderPopupReview(document.querySelector('#compact-review')!,state,preferences,id=>void analyze('one',id));
+  allButton.disabled=recheckButton.disabled=actionBusy || !state?.documents.length || !preferences.enabled || !preferences.aiConsent.enabled;
+  document.querySelector('#evidence')!.toggleAttribute('hidden',!state);
   renderDemo();
 }
 async function persist(next: typeof preferences) {
   if (saving || !preferences) return;
+  const previous=preferences;
+  const patch={...(next.enabled!==previous.enabled ? {enabled:next.enabled} : {}),...(JSON.stringify(next.priorities)!==JSON.stringify(previous.priorities) ? {priorities:next.priorities} : {}),...(JSON.stringify(next.aiConsent)!==JSON.stringify(previous.aiConsent) ? {aiConsent:next.aiConsent} : {})};
   saving=true;paint();settingsStatus.textContent='Saving settings…';
-  try {await savePreferences(next); preferences=next; settingsStatus.textContent='Saved on this device.';}
+  try {await navigator.locks.request('redflag-preferences-v1',async()=>{const latest=await loadPreferences();const updated={...latest,...patch};await savePreferences(updated);preferences=updated;});settingsStatus.textContent='Saved on this device.';}
   catch {settingsStatus.textContent='Could not save settings. The change was not applied.';}
   finally {saving=false;paint();}
 }
@@ -65,11 +96,11 @@ function refreshAccess() {void renderSiteAccess(document.querySelector('#site-ac
 async function init() {
   preferences=await loadPreferences(); paint();
   const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
-  if (tab?.url && /^https?:\/\//.test(tab.url)) {const url=new URL(tab.url);url.search='';url.hash='';url.username='';url.password='';activePageUrl=url.href;}
+  if (tab?.url && /^https?:\/\//.test(tab.url)) {const url=new URL(tab.url);url.search='';url.hash='';url.username='';url.password='';activePageUrl=url.href;document.querySelector('#domain')!.textContent=url.hostname;} else {document.querySelector('#domain')!.textContent='Open a website';status.textContent='This browser page cannot be reviewed. Open an HTTP or HTTPS website.';}
   try {
     const response: ExtensionResponse = await chrome.runtime.sendMessage({type:'redflag/get-state'});
     if (response?.ok && response.state && response.state.pageUrl === activePageUrl) {state=response.state;paint();}
-    else status.textContent=response && !response.ok ? response.error : 'No supported consent screen has been discovered in the active tab.';
+    else if(activePageUrl) status.textContent=response && !response.ok ? response.error : 'No supported consent screen has been discovered in the active tab.';
   } catch {status.textContent='Automatic discovery is not connected in this build. No real website analysis is available.';}
   refreshAccess();
 }

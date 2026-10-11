@@ -1,20 +1,13 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RedFlag · Before you agree</title><link rel="stylesheet" href="popup.css"></head>
 <body><main>
-<img class="brand-logo" src="icons/redflag-128.png" alt="RedFlag logo" width="48" height="48">
-<p class="eyebrow">REDFLAG · RESEARCH PROTOTYPE</p><h1>Before you agree.</h1>
-<p>Supported consent screens show a review automatically. Each agreement keeps its own grade and evidence.</p>
-<section aria-labelledby="current-heading"><h2 id="current-heading">Current website</h2><p id="status" role="status" aria-live="polite">Looking for a review…</p><div id="results"></div></section>
+<header class="brand"><img class="brand-logo" src="icons/redflag-128.png" alt="RedFlag logo" width="48" height="48"><div><h1>RedFlag</h1><p id="domain">Current website</p></div><a id="settings-link" href="#settings" aria-label="Settings">⚙</a></header>
+<section aria-labelledby="current-heading"><div class="section-heading"><h2 id="current-heading">Before you agree</h2><button id="recheck" class="secondary" type="button" disabled>Re-check Site</button></div><p id="status" role="status" aria-live="polite">Discovering public policies…</p><p id="action-status" role="status" aria-live="polite"></p><div id="compact-review"></div><button id="analyze-all" type="button" class="secondary" disabled>Analyze all documents</button><details id="evidence"><summary>Grades, coverage &amp; exact evidence</summary><div id="results"></div></details><button id="open-summary" type="button">Open Summary ↗</button></section>
+<section aria-labelledby="recent-heading"><h2 id="recent-heading">Recently checked</h2><div id="recent-items"></div></section>
+<details id="settings"><summary>Consent &amp; site settings</summary>
 <section aria-labelledby="access-heading"><h2 id="access-heading">Site access</h2><p class="note">Allow access to supported consent screens and their public legal documents. Community lookup may send the site domain to ToS;DR. Form inputs and account data are excluded. Revoke access at any time.</p><p id="access-status" role="status" aria-live="polite"></p><div id="site-access"></div></section>
 <fieldset id="priorities"><legend>Your priorities <span>saved on this device</span></legend></fieldset>
-<section aria-labelledby="ai-heading"><h2 id="ai-heading">Background AI analysis</h2><p id="ai-disclosure" class="note"></p>
-<p id="ai-state" role="status" aria-live="polite">Off by default.</p>
-<button id="ai-toggle" type="button" aria-describedby="ai-disclosure">Enable background AI analysis</button>
-<p id="settings-status" role="status" aria-live="polite"></p></section>
-<details><summary>Local source preview and fictional example</summary>
-<div class="actions"><button id="capture" type="button">Review page text</button><button id="demo" type="button" class="secondary">Try fictional example</button></div>
-<p class="note">Manual preview stays in this popup. The fictional example is separate from the current website and is never used as a fallback result.</p>
-<p id="preview-status" role="status" aria-live="polite"></p>
-<section id="demo-results" aria-label="Fictional example" hidden></section>
-<details id="preview" hidden><summary>Captured source text</summary><pre id="text"></pre></details></details>
+<section aria-labelledby="ai-heading"><h2 id="ai-heading">Background AI analysis</h2><p id="ai-disclosure" class="note"></p><p id="ai-state" role="status" aria-live="polite">Off by default.</p><button id="ai-toggle" type="button" aria-describedby="ai-disclosure">Enable background AI analysis</button><p id="settings-status" role="status" aria-live="polite"></p></section></details>
+<details><summary>Local source preview and fictional example</summary><div class="actions"><button id="capture" type="button">Review page text</button><button id="demo" type="button" class="secondary">Try fictional example</button></div><p class="note">Manual preview stays in this popup. The fictional example is separate from the current website and is never used as a fallback result.</p><p id="preview-status" role="status" aria-live="polite"></p><section id="demo-results" aria-label="Fictional example" hidden></section><details id="preview" hidden><summary>Captured source text</summary><pre id="text"></pre></details></details>
+<p class="note typography">Typography preview: temporary system monospace.</p>
 </main><script type="module" src="popup.js"></script></body></html>

@@ -1,12 +1,33 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RedFlag</title><link rel="stylesheet" href="popup.css"></head>
 <body><main>
-<header class="brand"><img class="brand-logo" src="icons/redflag-128.png" alt="" width="40" height="40"><div><h1>RedFlag</h1><p id="domain">Current website</p></div></header>
-<section id="onboarding" hidden><div id="interest-step"><p class="eyebrow">MAKE IT YOURS · 1 OF 2</p><h2>What should stand out?</h2><p>Choose your focus. Matching findings come first; grades stay consistent.</p><div id="interest-choices"></div><label class="custom-label" for="custom-interest">Something else?</label><div class="custom-interest-row"><input id="custom-interest" maxlength="80" placeholder="e.g. AI training"><button id="add-interest" class="secondary" type="button">Add</button></div><div id="custom-interests"></div><p id="interest-status" role="status"></p><button id="onboarding-next">Continue</button><button id="skip-interests" class="secondary">Skip</button></div><div id="consent-step" hidden><p class="eyebrow">PUBLIC POLICY CHECKS · 2 OF 2</p><h2>Ready when you are</h2><p>Gemini reads public policies. ToS;DR receives the site domain. Your account data and form inputs stay out.</p><p id="connection-status" class="note" role="status">Connecting…</p><button id="start">Enable checks</button><button id="community-only" class="secondary">Not now</button><button id="retry-connection" class="secondary">Retry connection</button><details><summary>Advanced connection</summary><button id="connect">Import connection file</button><input id="connection-file" type="file" accept="application/json,.json" hidden></details></div></section>
+<header class="brand"><img class="brand-logo" src="icons/redflag-128.png" alt="" width="40" height="40"><div><h1>RedFlag</h1></div></header>
+<section id="onboarding" aria-label="Set up RedFlag" hidden>
+<ol class="setup-progress" aria-label="Setup progress"><li id="progress-interests" aria-current="step"><span>1</span>Your focus</li><li id="progress-consent"><span>2</span>Policy checks</li></ol>
+<div id="interest-step">
+<p class="eyebrow">MAKE IT YOURS · 1 OF 2</p><h2 id="interest-title" tabindex="-1">What matters to you?</h2><p>Pick any interests, or skip this step. Matching findings come first; grades stay consistent.</p>
+<div id="interest-choices"></div>
+<label class="custom-label" for="custom-interest">Add your own interest <span class="optional">(optional)</span></label>
+<div class="custom-interest-row"><input id="custom-interest" maxlength="80" placeholder="e.g. AI training"><button id="add-interest" class="secondary" type="button">Add</button></div>
+<div id="custom-interests"></div><p id="interest-status" role="status"></p>
+<div class="setup-actions"><button id="onboarding-next" type="button">Continue</button><button id="skip-interests" class="secondary" type="button">Skip for now</button></div>
+</div>
+<div id="consent-step" hidden>
+<p class="eyebrow">PUBLIC POLICY CHECKS · 2 OF 2</p><h2 id="consent-title" tabindex="-1">Read less. Know more.</h2><p>Get clear grades and sourced explanations before you agree.</p>
+<ul class="setup-benefits"><li>Gemini reads public policy text.</li><li>ToS;DR receives the website domain.</li><li>Your form entries and account data stay out.</li></ul>
+<div class="connection-panel"><h3>Local connection</h3><p id="connection-status" class="note" role="status" aria-live="polite">Connecting…</p><p class="connection-help">AI checks need the RedFlag backend running on this device.</p><button id="retry-connection" class="text-button" type="button">Retry connection</button></div>
+<div class="setup-actions stacked"><button id="start" type="button">Enable checks</button><button id="community-only" class="secondary" type="button">Use community ratings</button></div>
+<p class="setup-note">You can change this later in Settings.</p>
+<details class="advanced-connection"><summary>Use another backend</summary><button id="connect" class="secondary" type="button">Import connection file</button><input id="connection-file" type="file" accept="application/json,.json" hidden></details>
+<button id="onboarding-back" class="text-button" type="button">← Back to interests</button>
+</div>
+<p id="onboarding-status" role="alert" aria-live="polite"></p>
+</section>
 <section aria-label="Current site"><h2 id="current-heading" class="sr-only">Site review</h2><p id="status" role="status" aria-live="polite"></p><div id="loading" hidden role="status">Looking for policies…</div><div id="no-policies" hidden><h2>I couldn’t find anything on this platform</h2><p>No public privacy, cookie, or terms policies were found. Try another page on this site or check again.</p><button id="find-policies" class="secondary">Look again</button></div><div id="compact-review"></div><p id="action-status" role="status" aria-live="polite"></p></section>
 <div class="insight-tabs" role="tablist" aria-label="Policy insights"><button id="tab-flags" role="tab" aria-controls="panel-flags" aria-selected="true">Red flags</button><button id="tab-summary" role="tab" aria-controls="panel-summary" aria-selected="false" tabindex="-1">Summary</button><button id="tab-chat" role="tab" aria-controls="panel-chat" aria-selected="false" tabindex="-1">Chat</button></div>
 <section id="panel-flags" role="tabpanel" aria-labelledby="tab-flags" tabindex="0"><div id="flags-content"></div></section>
 <section id="panel-summary" role="tabpanel" aria-labelledby="tab-summary" tabindex="0" hidden><div id="summary-content"></div></section>
 <section id="panel-chat" role="tabpanel" aria-labelledby="tab-chat" hidden><p id="chat-model" class="meta">Ask about this site’s policies</p><div id="chat-messages" aria-live="polite"></div><form id="chat-form"><label for="chat-input" class="sr-only">Ask about this site’s policies</label><textarea id="chat-input" maxlength="2000" rows="2" placeholder="Ask about this site…"></textarea><button id="chat-send" type="submit" aria-label="Send question">↑</button></form><p id="chat-status" role="status" aria-live="polite"></p></section>
 <section class="sites-section" hidden aria-labelledby="recent-heading"><h2 id="recent-heading">My sites</h2><div id="recent-items"></div><button id="open-summary" class="secondary">All sites ↗</button></section>
+<nav class="popup-footer" aria-label="RedFlag pages"><a href="dashboard.html#sites" target="_blank" rel="noopener">My sites</a><a href="dashboard.html#settings" target="_blank" rel="noopener">Settings</a></nav>
 </main><script type="module" src="popup.js"></script></body></html>

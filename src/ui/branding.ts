@@ -14,10 +14,11 @@ export function flagMark(grade:string,doc:Document=document):SVGSVGElement {
 }
 export const gradeVisualCss = `
 :is(.grade-tile,.document-grade,.overall-grade)[data-grade]:not([data-grade=Unrated]) {
- background:linear-gradient(115deg,#ffffff55 0%,transparent 38%,#00000025 100%),var(--grade-color);
- color:#fff;border:2px solid var(--grade-color);box-shadow:inset 0 2px 2px #ffffffa0,inset 0 0 0 3px #00000020,0 2px 4px #00000030;
- text-shadow:0 2px 2px #00000066;
+ background:linear-gradient(145deg,#ffffff30,transparent 45%,#00000012),var(--grade-color);
+ color:#fff;border:1px solid #3c2c2233;box-shadow:inset 0 1px 1px #ffffff70;
+ text-shadow:0 1px 1px #3c2c2266;
 }
+:is(.grade-tile,.document-grade,.overall-grade)[data-grade]:is([data-grade=S],[data-grade=A],[data-grade=B],[data-grade=C]){color:var(--rf-heading);text-shadow:none}
 [data-grade=S]{--grade-color:var(--rf-grade-s)}[data-grade=A]{--grade-color:var(--rf-grade-a)}[data-grade=B]{--grade-color:var(--rf-grade-b)}[data-grade=C]{--grade-color:var(--rf-grade-c)}[data-grade=D]{--grade-color:var(--rf-grade-d)}[data-grade=E]{--grade-color:var(--rf-grade-e)}
 :is(.grade-tile,.document-grade,.overall-grade)[data-grade=Unrated]{background:var(--rf-surface-raised);color:var(--rf-metadata);border:1px solid var(--rf-border);box-shadow:none;text-shadow:none;font-family:Arial,sans-serif}
 .grade-tile[data-grade]{height:58px}.document-grade[data-grade]{height:33px}

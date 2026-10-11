@@ -4,7 +4,15 @@
 
 RedFlag is a Manifest V3 Chrome extension that discovers public privacy, cookie, and terms policies, combines attributed ToS;DR community ratings with Google Gemini analysis, and explains concerns using exact passages from the source documents.
 
-**Current version:** 0.3.6 · **Status:** local developer extension with a local Gemini backend. No public backend is deployed.
+**Current version:** 0.3.7 · **Status:** local developer extension with a local Gemini backend. No public backend is deployed.
+
+## Version 0.3.7
+
+The popup, onboarding and saved reviews use cream backgrounds, brown text and red-orange actions. Grade badges and summary bars preserve the reference colors. The website appears once in the grade card; cards and tabs have simpler borders and spacing.
+
+Onboarding includes visible step progress, optional interests, keyboard custom-interest entry, back navigation, connection retry and community-only setup. Failed saves stay visible, and consent and completion are saved together. My sites and Settings are reachable from the popup footer after setup.
+
+Analyze all preserves discovery errors and disables repeat clicks while starting or running. Policy cards show pending and failure reasons; detail panels explain permission, backend, timeout and rate-limit errors. See [0.3.7 verification](docs/site-review-0.3.7.md) for the packaged onboarding and Analyze tests and the bounded live Gemini check.
 
 ## What you can do
 
@@ -105,7 +113,7 @@ npm run test:backend-browser
 
 Browser suites require a Playwright-compatible Chromium installation. Most UI and transport checks use simulated provider responses; they do not establish live Gemini output quality.
 
-The latest local verification passed TypeScript, all **77 unit tests**, the production build, and DOM extraction checks. Live Chrome verification confirmed policy discovery, a supported privacy grade, sourced findings, and the no-results screen. Automated Chromium launch was unavailable in that environment. Additional verification records are in [docs/verification.md](docs/verification.md).
+Version 0.3.7 passed TypeScript, all **77 unit tests**, the production build, onboarding, popup, extraction, dashboard and Analyze browser checks. The extracted ZIP passed actual Chromium MV3 onboarding and authenticated local-backend integration. A separate bounded live Gemini check exercised individual Analyze and Analyze all and returned validated sourced findings with no upstream transport failures. Earlier live Chrome verification also confirmed policy discovery, a supported privacy grade and the no-results screen. See [0.3.7 verification](docs/site-review-0.3.7.md) and [earlier records](docs/verification.md) for the scope and limits of each check.
 
 ### Supporting tools
 

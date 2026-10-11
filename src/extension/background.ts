@@ -314,5 +314,10 @@ chrome.runtime.onInstalled.addListener(() => {void chrome.alarms.create('redflag
 chrome.runtime.onStartup.addListener(() => {void chrome.alarms.create('redflag-recovery',{periodInMinutes:0.5});void syncContentScripts();void pump();});
 void initialized.then(() => {void chrome.alarms.create('redflag-recovery',{periodInMinutes:0.5});void pump();});
 
-chrome.tabs.onActivated.addListener(({tabId})=>{void initialized.then(()=>toolbar.update(tabId,snapshot.sessions[tabId]?.state));});
-void initialized.then(async()=>{for(const tab of await chrome.tabs.query({})) if(tab.id !== undefined) await toolbar.update(tab.id,snapshot.sessions[tab.id]?.state);});
+chrome.tabs.onActivated.addListener(({tabId})=>{void initialized.then(async()=>{
+  const tab=await chrome.tabs.get(tabId).catch(()=>undefined);
+  const state=snapshot.sessions[tabId]?.state;
+  let current=false;try{current=!!tab?.url && !!state && safePageUrl(tab.url)===state.pageUrl;}catch{}
+  await toolbar.update(tabId,current?state:undefined);
+});});
+void initialized.then(async()=>{for(const tab of await chrome.tabs.query({})) if(tab.id !== undefined) {const state=snapshot.sessions[tab.id]?.state;let current=false;try{current=!!tab.url && !!state && safePageUrl(tab.url)===state.pageUrl;}catch{}if(!current) {delete snapshot.sessions[tab.id];snapshot.jobs=snapshot.jobs.filter(j=>j.tabId!==tab.id);}await toolbar.update(tab.id,current?state:undefined);}await persist();});

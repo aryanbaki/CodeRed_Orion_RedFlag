@@ -80,7 +80,13 @@ try {
  const detached=await reopened.evaluate(async siteOrigin=>chrome.runtime.sendMessage({type:'redflag/recheck-site',siteOrigin}),savedOrigin);assert.equal(detached.ok,true);
  await expect.poll(async()=>reopened.evaluate(async()=>{const sites=(await chrome.storage.local.get('redflag.history.v1'))['redflag.history.v1'].sites;return sites.find(s=>s.origin==='https://service.com')?.documents.every(d=>d.status!=='pending');})).toBe(true);
  const missingSaved=await reopened.evaluate(async()=>chrome.runtime.sendMessage({type:'redflag/recheck-site',siteOrigin:'https://deleted.com'}));assert.equal(missingSaved.code,'history-unavailable');
- const untrusted=await page.evaluate(async()=>chrome.runtime?.sendMessage?.({type:'redflag/analyze',mode:'all',pageKey:'wrong'})).catch(()=>undefined);
+
+ await worker.evaluate(()=>{globalThis.hold=true;});
+ const delayedSaved=await reopened.evaluate(async siteOrigin=>chrome.runtime.sendMessage({type:'redflag/recheck-site',siteOrigin}),savedOrigin);assert.equal(delayedSaved.ok,true);
+ await reopened.evaluate(async()=>{const key='redflag.history.v1',data=(await chrome.storage.local.get(key))[key];data.deleted.push(...data.sites.map(s=>({origin:s.origin,generation:s.generation,at:new Date().toISOString()})));data.sites=[];await chrome.storage.local.set({[key]:data});});
+ await page.waitForTimeout(500);
+ assert.equal(await reopened.evaluate(async()=> (await chrome.storage.local.get('redflag.history.v1'))['redflag.history.v1'].sites.length),0);
+ const deletedRecheck=await reopened.evaluate(async siteOrigin=>chrome.runtime.sendMessage({type:'redflag/recheck-site',siteOrigin}),savedOrigin);assert.equal(deletedRecheck.code,'history-unavailable');
  const requests=await worker.evaluate(()=>globalThis.requests);assert.ok(requests.every(r=>r.credentials==='omit'));assert.ok(requests.every(r=>!r.body?.includes('email')));
  console.log('Actions browser checks passed: actual worker one/all/recheck, cache, duplicate joining, bounded concurrency/timeout, independent mixed failures, AI disabled, permissions, popup close/reopen, stale generation and per-tab badges; public responses and Gemini mocked.');
 }finally{await context?.close();await rm(root,{recursive:true,force:true});}

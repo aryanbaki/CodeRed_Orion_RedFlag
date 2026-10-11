@@ -85,6 +85,7 @@ export interface DocumentReview {
   community: CommunityReference[];
   assessment?: DocumentAssessment;
   cached: boolean;
+  failure?: {stage: 'retrieval' | 'analysis';code: UnratedReason;message:string;retryAfterSeconds?:number};
 }
 
 export interface ReviewState {

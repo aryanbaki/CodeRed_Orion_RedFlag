@@ -107,11 +107,13 @@ async function analyzePolicy(documentId:string){
  catch{get('action-status').textContent='Could not start analysis. Try again.';}finally{busyIds.delete(documentId);paint();}
 }
 async function analyzeAll(){
- if(busy||analyzeAllBusy||!canAnalyze())return;
+ if(busy||analyzeAllBusy)return;
  analysisStarted=true;analyzeAllBusy=true;paint();
  try{
+  // Discover public policies before requiring AI consent or a connected Gemini backend.
   if(!await scan())return;
   if(!state?.documents.length){get('action-status').textContent=state?.discoveryPending?'Still looking for policies…':'No public policies found.';return;}
+  if(!canAnalyze())return;
   const pageKey=state.pageKey;
   const result=await requestAnalysis({type:'redflag/analyze',mode:'recheck',pageKey});
   if(result.ok&&state?.pageKey===pageKey)acceptState(result.state);else if(!result.ok)get('action-status').textContent=result.error;

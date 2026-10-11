@@ -6,8 +6,6 @@ import {resolve,join} from 'node:path';
 import assert from 'node:assert/strict';
 const root = await mkdtemp(join(tmpdir(),'redflag-discovery-'));
 let context;
-let withOverview=false;
-try {await readFile('src/ui/overview.ts');withOverview=true;} catch {}
 try {
   const extension=join(root,'extension');await cp(resolve('dist/extension'),extension,{recursive:true});
   const manifest=JSON.parse(await readFile(join(extension,'manifest.json'),'utf8'));
@@ -48,7 +46,7 @@ try {
     await expect.poll(async () => (await getState())?.documents.length).toBe(5);
     await expect.poll(async () => (await getState())?.documents.every(d=>d.status==='unrated')).toBe(true);
     const state=await getState();assert.equal(state.context,kind);assert.ok(state.documents.every(d=>d.reason==='ai-consent-required'));assert.equal(state.documents.filter(d=>d.document.kind==='terms').length,3);
-    if(withOverview){await expect(page.getByRole('region',{name:'RedFlag agreement review'})).toBeVisible();await expect(page.getByRole('region',{name:'RedFlag agreement review'})).toContainText('Before you agree');await expect(page.getByRole('region',{name:'RedFlag agreement review'}).locator('.overall-grade')).toHaveText('?');}
+    await expect(page.locator('#redflag-overview')).toHaveCount(0);
     assert.equal(await page.locator('#agree').isChecked(),false);assert.equal(page.url(),'https://service.com/'+path);
   }
   const oldPageKey=(await getState()).pageKey;
@@ -103,7 +101,7 @@ try {
   await page.evaluate(()=>{const form=document.createElement('form');form.innerHTML='<p>Consent: I agree to <a href="/revoked">Additional Terms</a></p>';document.body.append(form);});
   await expect.poll(async()=> (await getState())?.documents.find(d=>d.document.url.endsWith('/revoked'))?.reason).toBe('ai-consent-required');
   assert.equal(await worker.evaluate(()=>requests.filter(r=>r.url.endsWith('/api/analyze')).length),afterRevocation);
-  if(withOverview){await page.getByRole('button',{name:'Dismiss',exact:true}).click();await expect(page.locator('[data-redflag-ui]')).toHaveCount(0);}
+    await expect(page.locator('#redflag-overview')).toHaveCount(0);
   // Native worker suspension/restart: session storage preserves job/state data.
   await expect.poll(async()=> (await getState())?.documents.every(d=>d.status!=='pending')).toBe(true);
   await page.evaluate(()=>{const form=document.createElement('form');form.innerHTML='<p>Consent: I agree to <a href="/suspend">Additional Terms</a></p>';document.body.append(form);});
@@ -118,7 +116,7 @@ try {
   assert.equal((await getState()).documents.find(d=>d.document.url.endsWith('/suspend')).assessment,undefined);
   assert.equal(await worker.evaluate(()=>typeof globalThis.testEpoch),'undefined');
   assert.equal(await popup.evaluate(async()=> (await chrome.storage.session.get('redflag.jobs.v1'))['redflag.jobs.v1'].jobs.length),0);
-  if(withOverview) await expect(page.locator('[data-redflag-ui]')).toHaveCount(0);
+    await expect(page.locator('#redflag-overview')).toHaveCount(0);
   assert.deepEqual(errors,[]);
   console.log('Discovery browser checks passed: four consent flows, five legal labels, dynamic dialogs/link replacement, independent failure states, credentials omitted, no control events, accessible names, inert extraction, consented transport/revocation, responsive browsing, in-flight worker suspension/recovery. Retrieval is simulated; no live AI/provider call.');
 } finally {await context?.close();await rm(root,{recursive:true,force:true});}

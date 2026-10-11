@@ -24,4 +24,4 @@ Browser checks use controlled public-document and provider responses. They estab
 
 SHA-256: `6f871d6a5e1c5f437e918ddcfcb0ed8b86d3685e4bb7dc77cf6561589411b962`
 
-ZIP integrity, root manifest/version, safe entry paths, credential exclusions and byte equality with the final build passed. The archive was extracted to a fresh folder for onboarding and extension-to-backend verification. Team entry points are `AGENTS.md` and `docs/TEAM_HANDOFF.md`.
+ZIP integrity, root manifest/version, safe entry paths, credential exclusions and byte equality with the final build passed. The extracted archive passed both onboarding and extension-to-backend verification. `node tests/site-discovery-browser.mjs` also passed public-page discovery and permission flows. Team entry points are `AGENTS.md` and `docs/TEAM_HANDOFF.md`.

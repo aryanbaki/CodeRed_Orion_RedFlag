@@ -10,10 +10,13 @@ import {publicDocumentUrl} from '../discovery/urls.ts';
 import {ToolbarController} from '../background/toolbar.ts';
 import {AnalysisFailure} from '../background/failures.ts';
 import type {AnalysisActionResponse,AnalysisCommand} from '../core/analysis-actions.ts';
+import type {ScanCurrentCommand,ScanCurrentResponse} from '../core/discovery-actions.ts';
 import {getHistory,recordReview} from '../history/store.ts';
 import {reviewFromSite,checkedOrigin} from '../history/model.ts';
 const toolbar=new ToolbarController();
 const navigationEpoch=new Map<number,number>();
+const manualAccess=new Map<number,{pageUrl:string;documentId?:string}>();
+const scans=new Map<number,Promise<ScanCurrentResponse>>();
 const SESSION_KEY = 'redflag.jobs.v1';
 const BACKEND_KEY = 'redflag.backend.v1';
 interface Job {tabId:number;pageKey:string;documentId:string;attempts:number;bypassCache?:boolean}
@@ -77,6 +80,7 @@ async function analyze(document:AnalysisDocument,isCurrent:()=>boolean=()=>true)
   const wait=(snapshot.cooldowns?.[config.baseUrl]??0)-Date.now();
   if(wait>0) throw new AnalysisFailure('quota',Math.ceil(wait/1000));
   if (!await permitted(config.baseUrl)) throw new AnalysisFailure('permission-required');
+  if (!await permitted(document.url)) throw new AnalysisFailure('permission-required');
   if (!permitsAi(await preferences())) throw new Error('ai-consent-required');
   if(!isCurrent()) throw new Error('inaccessible');
   const controller = new AbortController(); controllers.add(controller);
@@ -181,6 +185,7 @@ async function discover(tabId:number,browserDocumentId:string | undefined,pageUr
     snapshot.sessions[tabId] = {browserDocumentId,state:pendingState(crypto.randomUUID(),pageUrl,context,[])};
   }
   const session = snapshot.sessions[tabId];
+  session.state.context=context;
   session.state.documents = session.state.documents.filter(review => documents.some(d => d.url === review.document.url && d.kind === review.document.kind));
   snapshot.jobs = snapshot.jobs.filter(job => job.pageKey !== session.state.pageKey || session.state.documents.some(d => d.document.id === job.documentId));
   for (const document of documents) {
@@ -195,6 +200,41 @@ async function discover(tabId:number,browserDocumentId:string | undefined,pageUr
   return session.state;
 }
 function trustedUi(sender:chrome.runtime.MessageSender) {return sender.id === chrome.runtime.id && !!sender.url?.startsWith(chrome.runtime.getURL(''));}
+function matchesGrant(raw:string,pattern:string):boolean {
+  try {const url=new URL(raw);const match=pattern.match(/^(\*|https?|file):\/\/([^/]+)\//);if(!match)return false;
+    if(match[1]!=='*' && match[1]+':'!==url.protocol)return false;
+    const host=match[2];return host==='*' || host===url.host || host.startsWith('*.') && (url.hostname===host.slice(2) || url.hostname.endsWith('.'+host.slice(2)));
+  } catch{return false;}
+}
+async function persistentAccess(url:string) {return ((await chrome.permissions.getAll()).origins ?? []).some(pattern=>matchesGrant(url,pattern));}
+async function scanTab(tabId:number):Promise<ScanCurrentResponse> {
+  const reject=(code:Extract<ScanCurrentResponse,{ok:false}>['code'],error:string):ScanCurrentResponse=>({ok:false,code,error});
+  if(!(await preferences()).enabled)return reject('disabled','RedFlag reviews are disabled.');
+  const tab=await chrome.tabs.get(tabId).catch(()=>undefined);
+  let pageUrl:string;try {pageUrl=safePageUrl(tab?.url ?? '');}catch{return reject('unsupported-page','Open an HTTP or HTTPS website to scan for legal links.');}
+  const epoch=navigationEpoch.get(tabId) ?? 0;
+  let frames:chrome.scripting.InjectionResult[];
+  try {frames=await chrome.scripting.executeScript({target:{tabId,frameIds:[0]},files:['content.js']});}
+  catch{return reject('permission-required','Allow site access, or open RedFlag using its toolbar button on this page.');}
+  const documentId=frames[0]?.documentId;
+  const current=await chrome.tabs.get(tabId).catch(()=>undefined);
+  if(epoch!==(navigationEpoch.get(tabId) ?? 0) || !current?.url || safePageUrl(current.url)!==pageUrl)return reject('stale-page','The page changed during discovery. Try again.');
+  // The browser, not a content-script payload, grants this current document access.
+  manualAccess.set(tabId,{pageUrl,documentId});
+  try {await chrome.tabs.sendMessage(tabId,{type:'redflag/internal-scan'},documentId ? {documentId} : {frameId:0});}
+  catch{return reject('stale-page','The page changed or discovery is unavailable. Try again.');}
+  const state=snapshot.sessions[tabId]?.state;
+  if(epoch!==(navigationEpoch.get(tabId) ?? 0) || !state || state.pageUrl!==pageUrl || snapshot.sessions[tabId]?.browserDocumentId!==documentId)return reject('stale-page','The page changed during discovery. Try again.');
+  return {ok:true,state:structuredClone(state)};
+}
+async function scanCurrent(message:ScanCurrentCommand,sender:chrome.runtime.MessageSender):Promise<ScanCurrentResponse> {
+  if(!trustedUi(sender))return {ok:false,code:'untrusted',error:'Scanning requires trusted extension controls.'};
+  const tabId=message.tabId ?? (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id;
+  if(!Number.isInteger(tabId) || tabId!<0)return {ok:false,code:'unsupported-page',error:'No website tab is available.'};
+  let operation=scans.get(tabId!);
+  if(!operation){operation=scanTab(tabId!);scans.set(tabId!,operation);void operation.finally(()=>{if(scans.get(tabId!)===operation)scans.delete(tabId!);});}
+  return operation;
+}
 async function analysisAction(message:AnalysisCommand,sender:chrome.runtime.MessageSender):Promise<AnalysisActionResponse> {
   const reject=(code:import('../core/analysis-actions.ts').ActionRejection,error:string):AnalysisActionResponse=>({ok:false,code,error});
   if (!trustedUi(sender)) return reject('untrusted','Analysis commands require trusted extension controls.');
@@ -214,7 +254,15 @@ async function analysisAction(message:AnalysisCommand,sender:chrome.runtime.Mess
     tabId=message.tabId ?? (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id;
     if(!Number.isInteger(tabId) || tabId!<0) return reject('no-review','No current tab review is available.');
     const tab=await chrome.tabs.get(tabId!).catch(()=>undefined);
-    const current=snapshot.sessions[tabId!];
+    let current=snapshot.sessions[tabId!];
+    if(message.mode==='recheck' && (!current || !current.state.documents.length)) {
+      const scan=await scanCurrent({type:'redflag/scan-current',tabId:tabId!},sender);
+      if(!scan.ok)return reject('no-review',scan.error);
+      current=snapshot.sessions[tabId!];
+      if(current && !current.state.documents.length)return {ok:true,state:structuredClone(current.state),queuedDocumentIds:[],joinedDocumentIds:[]};
+      // A fresh scan may establish the first generation; use that authoritative identity.
+      if(current)message={...message,pageKey:current.state.pageKey};
+    }
     if(!current) return reject('no-review','No discovered policies are available in this tab.');
     try {if(!tab?.url || safePageUrl(tab.url)!==current.state.pageUrl || message.pageKey!==current.state.pageKey) return reject('stale-page','The page changed. Reload the current review.');} catch {return reject('stale-page','The page changed.');}
   }
@@ -240,6 +288,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply) => {
     switch (message.type) {
       case 'redflag/analyze':
       case 'redflag/recheck-site': return analysisAction(message,sender);
+      case 'redflag/scan-current': return scanCurrent(message,sender);
       case 'redflag/discover': {
         if (sender.tab?.id === undefined || sender.frameId !== 0 || !sender.url || !(await preferences()).enabled) throw new Error('Discovery unavailable');
         const epoch=navigationEpoch.get(sender.tab.id)??0;
@@ -252,6 +301,8 @@ chrome.runtime.onMessage.addListener((message,sender,reply) => {
           if(frame?.documentId !== sender.documentId) throw new Error('Stale browser document');
         }
         const input = validateDiscovery(message,currentUrl);
+        const manual=manualAccess.get(sender.tab.id);
+        if(!await persistentAccess(currentUrl) && !(manual?.pageUrl===input.pageUrl && manual.documentId===sender.documentId))throw new Error('Site access unavailable');
         if(epoch !== (navigationEpoch.get(sender.tab.id)??0)) throw new Error('Stale discovery');
         return {ok:true,state:await discover(sender.tab.id,sender.documentId,input.pageUrl,input.context,input.documents)};
       }
@@ -277,6 +328,7 @@ chrome.tabs.onUpdated.addListener((tabId,change) => {
   const old=snapshot.sessions[tabId];
   if(change.status !== 'loading' && change.url) {try {if(old?.state.pageUrl===safePageUrl(change.url)) return;}catch{}}
   navigationEpoch.set(tabId,(navigationEpoch.get(tabId)??0)+1);
+  manualAccess.delete(tabId);
   delete snapshot.sessions[tabId];snapshot.jobs=snapshot.jobs.filter(j=>j.tabId!==tabId);
   void toolbar.update(tabId);
   void initialized.then(async () => {
@@ -284,7 +336,7 @@ chrome.tabs.onUpdated.addListener((tabId,change) => {
     await persist();
   });
 });
-chrome.tabs.onRemoved.addListener(tabId => {toolbar.forget(tabId);navigationEpoch.delete(tabId);void initialized.then(async () => {delete snapshot.sessions[tabId];snapshot.jobs = snapshot.jobs.filter(j => j.tabId !== tabId);await persist();});});
+chrome.tabs.onRemoved.addListener(tabId => {toolbar.forget(tabId);navigationEpoch.delete(tabId);manualAccess.delete(tabId);void initialized.then(async () => {delete snapshot.sessions[tabId];snapshot.jobs = snapshot.jobs.filter(j => j.tabId !== tabId);await persist();});});
 async function syncContentScripts() {
   const current = await chrome.scripting.getRegisteredContentScripts({ids:['redflag-discovery']});
   if (current.length) await chrome.scripting.unregisterContentScripts({ids:['redflag-discovery']});
@@ -292,8 +344,44 @@ async function syncContentScripts() {
   const origins = (await chrome.permissions.getAll()).origins?.filter(origin => /^https?:\/\//.test(origin) || origin.startsWith('*://')) ?? [];
   if (origins.length) await chrome.scripting.registerContentScripts([{id:'redflag-discovery',matches:origins,js:['content.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true}]);
 }
-chrome.permissions.onAdded.addListener(() => {void syncContentScripts();});
-chrome.permissions.onRemoved.addListener(() => {void syncContentScripts();});
+let accessUpdates=Promise.resolve();
+async function updateAccess(scanOpenTabs:boolean) {
+  await initialized;await syncContentScripts();
+  const tabs=await chrome.tabs.query({});
+  const permittedTabs:chrome.tabs.Tab[]=[];
+  for(const tab of tabs) {
+    if(tab.id===undefined)continue;
+    const url=tab.url ?? snapshot.sessions[tab.id]?.state.pageUrl;
+    if(!url || !/^https?:/.test(url))continue;
+    if(await persistentAccess(url)){permittedTabs.push(tab);continue;}
+    if(!scanOpenTabs) {
+      manualAccess.delete(tab.id);navigationEpoch.set(tab.id,(navigationEpoch.get(tab.id) ?? 0)+1);
+      delete snapshot.sessions[tab.id];snapshot.jobs=snapshot.jobs.filter(job=>job.tabId!==tab.id);
+      await toolbar.update(tab.id);
+      await chrome.tabs.sendMessage(tab.id,{type:'redflag/internal-stop'}).catch(()=>{});
+    }
+  }
+  await persist();
+  if(scanOpenTabs) {
+    // Bound injection concurrency without requiring a reload or changing navigation.
+    let index=0;await Promise.all(Array.from({length:Math.min(3,permittedTabs.length)},async()=>{
+      while(index<permittedTabs.length){const tab=permittedTabs[index++];await scanTab(tab.id!).catch(()=>{});}
+    }));
+    for(const [id,session] of Object.entries(snapshot.sessions)) {
+      if(Number(id)<0)continue;
+      let changed=false;
+      for(const review of [...session.state.documents]) {
+        if(review.reason!=='permission-required' || !await permitted(review.document.url) || snapshot.jobs.some(job=>job.pageKey===session.state.pageKey && job.documentId===review.document.id))continue;
+        session.state.documents[session.state.documents.indexOf(review)]=pendingState(session.state.pageKey,session.state.pageUrl,session.state.context,[review.document]).documents[0];
+        snapshot.jobs.push({tabId:Number(id),pageKey:session.state.pageKey,documentId:review.document.id,attempts:0});changed=true;
+      }
+      if(changed)await publish(Number(id),session.state.pageKey);
+    }
+    await persist();void pump();
+  }
+}
+chrome.permissions.onAdded.addListener(() => {accessUpdates=accessUpdates.catch(()=>{}).then(()=>updateAccess(true));});
+chrome.permissions.onRemoved.addListener(() => {accessUpdates=accessUpdates.catch(()=>{}).then(()=>updateAccess(false));});
 chrome.storage.onChanged.addListener((changes,area) => {
   if (area !== 'local' || !changes[PREFERENCES_STORAGE_KEY]) return;
   void initialized.then(async () => {
@@ -308,7 +396,7 @@ chrome.storage.onChanged.addListener((changes,area) => {
     }
     await persist();
     for (const [tab,session] of Object.entries(snapshot.sessions)) await publish(Number(tab),session.state.pageKey);
-    await syncContentScripts();void pump();
+    await updateAccess(prefs.enabled);void pump();
   });
 });
 chrome.alarms.onAlarm.addListener(alarm => {if (alarm.name === 'redflag-recovery') void pump();});

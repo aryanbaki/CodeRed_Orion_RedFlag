@@ -1,8 +1,10 @@
 import {publicDocumentUrl} from './urls.ts';
 export type LegalKind = 'terms' | 'privacy' | 'additional';
-export interface DiscoveredLink {url: string; kind: LegalKind; label: string; element?: HTMLAnchorElement}
-const legal = /\b(terms\s*(?:of\s*(?:service|use)|(?:and|&)\s*conditions)|privacy\s*polic(?:y|ies)|additional\s*terms)\b/i;
+export interface DiscoveredLink {url: string; kind: LegalKind; label: string; element?: HTMLAnchorElement; consent?:boolean}
+const legal = /\b(additional\s*terms|terms\s*(?:of\s*(?:service|use)|(?:and|&)\s*conditions)|privacy\s*polic(?:y|ies))\b/i;
+const shortLegal = /^(terms|privacy)$/i;
 const agreement = /\b(sign\s*up|register|create\s*(?:an?\s*)?account|checkout|onboarding|consent|agree|accept|by\s*(?:continuing|proceeding)|get\s*started)\b/i;
+const explicitAgreement = /\b(consent|agree|accept|by\s*(?:continuing|proceeding))\b/i;
 function staticText(element: Element): string {
   const copy = element.cloneNode(true) as Element;
   copy.querySelectorAll('input,textarea,select,script,style,[contenteditable], [data-redflag-ui]').forEach(e => e.remove());
@@ -12,16 +14,20 @@ function inContext(link: Element): boolean {
   let parent: Element | null = link.parentElement;
   for (let depth = 0; parent && depth < 6; depth++, parent = parent.parentElement) {
     if (parent.matches('[data-redflag-ui]')) return false;
-    if (parent.matches('form,dialog,[role="dialog"],[role="group"],section,main,body,label,p,div')) {
+    if (parent.matches('form,dialog,[role="dialog"],[role="group"],section,label,p,div')) {
       // Bound context cloning to avoid repeatedly copying the full document.
-      if (parent.querySelectorAll('*').length <= 250 && agreement.test(staticText(parent))) return true;
+      const contextual=parent.matches('form,dialog,[role="dialog"]') ? agreement : explicitAgreement;
+      if (parent.querySelectorAll('*').length <= 250 && contextual.test(staticText(parent))) return true;
     }
   }
   return false;
 }
 /** No values, form state, surrounding page text, or account identifiers leave this function. */
 export function discoverLegalLinks(root: ParentNode, base: string, deduplicate = true): DiscoveredLink[] {
-  const candidates = Array.from(root.querySelectorAll('a[href]'));
+  const all = Array.from(root.querySelectorAll('a[href]'));
+  // Include the footer even on repositories with hundreds of unrelated links.
+  const candidates = [...new Set([...root.querySelectorAll('footer a[href],[role="contentinfo"] a[href]')].slice(0,200).concat(
+    [...root.querySelectorAll('nav a[href]')].slice(-100),all.slice(0,100),all.slice(-100)))];
   if (root instanceof Element && root.matches('a[href]')) candidates.unshift(root as HTMLAnchorElement);
   const results = new Map<string, DiscoveredLink>();
   for (const link of candidates.slice(0, 500)) {
@@ -29,14 +35,18 @@ export function discoverLegalLinks(root: ParentNode, base: string, deduplicate =
     const names = [staticText(link), link.getAttribute('aria-label') ?? '', link.getAttribute('title') ?? ''];
     const labelled = link.getAttribute('aria-labelledby')?.split(/\s+/).map(id => link.ownerDocument.getElementById(id)).filter(Boolean) as Element[] | undefined;
     if (labelled) names.push(...labelled.map(staticText));
-    const match = names.join(' ').match(legal);
-    if (!match || !inContext(link)) continue;
+    const match = names.join(' ').match(legal) ?? names.map(name=>name.trim().match(shortLegal)).find(Boolean);
+    if (!match) continue;
     try {
       const url = publicDocumentUrl(link.getAttribute('href')!, base);
       const label = match[0];
+      if(shortLegal.test(label) && (/\/(?:blog|articles?|settings|issues|pull|discussions)(?:\/|$)/i.test(new URL(url).pathname) ||
+        !/\/(?:site-policy|policies|legal|privacy(?:-policy)?|terms(?:-of-(?:service|use))?)(?:\/|$)/i.test(new URL(url).pathname))) continue;
       const kind = /privacy/i.test(label) ? 'privacy' : /additional/i.test(label) ? 'additional' : 'terms';
       // A shared URL with distinct scopes is still two agreements.
-      results.set(deduplicate ? kind + ':' + url : String(results.size), {url, kind, label, element:link as HTMLAnchorElement});
+      const key=deduplicate ? kind + ':' + url : String(results.size);
+      const consent=inContext(link) || results.get(key)?.consent === true;
+      results.set(key, {url, kind, label, element:link as HTMLAnchorElement,consent});
     } catch { /* Invalid/unsafe links never become fetch requests. */ }
   }
   return [...results.values()];
@@ -44,7 +54,7 @@ export function discoverLegalLinks(root: ParentNode, base: string, deduplicate =
 export function observeLegalLinks(document: Document, emit: (links: DiscoveredLink[]) => void): () => void {
   const roots = new Set<ParentNode>();
   const tracked = new Map<Element,DiscoveredLink>();
-  let signature = '';
+  let signature: string | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const flush = () => {
     timer = undefined;
@@ -52,8 +62,11 @@ export function observeLegalLinks(document: Document, emit: (links: DiscoveredLi
     for (const root of roots) for (const link of discoverLegalLinks(root, document.baseURI,false)) if (link.element) tracked.set(link.element,link);
     roots.clear();
     const links = new Map<string,DiscoveredLink>();
-    for (const link of tracked.values()) links.set(link.kind + ':' + link.url,link);
-    const next = JSON.stringify([...links.keys()].sort());
+    for (const link of tracked.values()) {
+      const key=link.kind + ':' + link.url;
+      links.set(key,{...link,consent:link.consent || links.get(key)?.consent === true});
+    }
+    const next = JSON.stringify([...links].map(([key,link])=>[key,!!link.consent]).sort());
     if (next !== signature) { signature = next; emit([...links.values()]); }
   };
   const observer = new MutationObserver(records => {
@@ -63,7 +76,7 @@ export function observeLegalLinks(document: Document, emit: (links: DiscoveredLi
         const target = record.target instanceof Element ? record.target : record.target.parentElement;
         if (target) roots.add(target.closest('form,dialog,[role="dialog"],section') ?? target.parentElement ?? target);
       } else {
-        for (const node of record.addedNodes) if (node instanceof Element && !node.matches('[data-redflag-ui]')) roots.add(node);
+        for (const node of record.addedNodes) if (node instanceof Element && !node.matches('[data-redflag-ui]')) roots.add(node.closest('form,dialog,[role="dialog"],section') ?? node);
         if ([...record.removedNodes].some(node => !(node instanceof Element && node.matches('[data-redflag-ui]'))) && record.target instanceof Element) roots.add(record.target);
       }
     }

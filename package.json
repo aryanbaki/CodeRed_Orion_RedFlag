@@ -18,7 +18,8 @@
     "start:server": "node --experimental-strip-types --env-file=.env src/server/main.ts",
     "test:backend-browser": "node --experimental-strip-types tests/backend-browser.ts",
     "test:actions-browser": "npm run build && node tests/actions-browser.mjs",
-    "test:dashboard": "npm run build && node tests/dashboard-browser.mjs"
+    "test:dashboard": "npm run build && node tests/dashboard-browser.mjs",
+    "test:popup-redesign": "npm run build && node tests/popup-redesign.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",

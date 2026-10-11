@@ -88,6 +88,10 @@ try {
  const otherId=await reopened.evaluate(async()=> (await chrome.tabs.query({url:'https://service.com/empty'}))[0].id);
  await expect.poll(()=>worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),otherId)).toBe('?');
  await page.bringToFront();await expect.poll(()=>worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),tabId)).toBe('E');
+ await reopened.reload();
+ await expect(reopened.locator('#compact-review')).toContainText('2 of 2');
+ const summaryOpened=context.waitForEvent('page');await reopened.locator('#open-summary').click();const summaryTab=await summaryOpened;await summaryTab.waitForLoadState();assert.equal(new URL(summaryTab.url()).hash,'#site=https%3A%2F%2Fservice.com');await expect(summaryTab.locator('main')).toContainText('service.com');
+ const recentOpened=context.waitForEvent('page');await reopened.getByRole('button',{name:'Open saved review for service.com',exact:true}).click();const recentTab=await recentOpened;await recentTab.waitForLoadState();assert.equal(new URL(recentTab.url()).hash,'#site=https%3A%2F%2Fservice.com');
  const savedOrigin='https://service.com';
  const detached=await reopened.evaluate(async siteOrigin=>chrome.runtime.sendMessage({type:'redflag/recheck-site',siteOrigin}),savedOrigin);assert.equal(detached.ok,true);
  await expect.poll(async()=>reopened.evaluate(async()=>{const sites=(await chrome.storage.local.get('redflag.history.v1'))['redflag.history.v1'].sites;return sites.find(s=>s.origin==='https://service.com')?.documents.every(d=>d.status!=='pending');})).toBe(true);

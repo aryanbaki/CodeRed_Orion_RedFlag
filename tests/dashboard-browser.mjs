@@ -46,7 +46,7 @@ try {
   await helperPage.evaluate(s=>testHistory.recordReview(s),update);
   await expect(dashboard.getByText('Grade: Unrated',{exact:true})).toHaveCount(2);
   // Shared local settings synchronize both ways with the actual popup.
-  const popup=await context.newPage();await popup.goto(base+'/popup.html');
+  const popup=await context.newPage();await popup.goto(base+'/popup.html');await popup.locator('#settings-link').click();
   await dashboard.getByRole('link',{name:'Settings',exact:true}).click();
   await dashboard.getByRole('checkbox',{name:'Allow background AI analysis',exact:false}).check();
   await expect(popup.getByRole('button',{name:'Turn off background AI analysis'})).toBeVisible();

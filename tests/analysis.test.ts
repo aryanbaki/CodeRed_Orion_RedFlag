@@ -83,7 +83,7 @@ test('prompt injection remains untrusted user data; no model metadata is accepte
   const fake:typeof fetch=async(_url,init)=>{
     const body=JSON.parse(String(init?.body));assert.equal(body.contents[0].parts[0].text,d.text);
     assert.match(body.systemInstruction.parts[0].text,/untrusted document data/);assert.match(body.systemInstruction.parts[0].text,/arbitration/);
-    assert.equal(body.tools,undefined);assert.equal(body.store,false);assert.equal(body.generationConfig.responseFormat.text.schema.type,'object');
+    assert.equal(body.tools,undefined);assert.equal(body.store,false);assert.equal(body.generationConfig.responseJsonSchema.type,'object');
     return provider(output())(_url,init);
   };
   assert.equal((await analyzeDocument(d,config,fake)).grade,'B');
@@ -157,4 +157,12 @@ test('concurrency control rejects the third request before analysis starts',asyn
     for(let i=0;started < 2 && i<100;i++) await new Promise(resolve=>setTimeout(resolve,2));
     assert.equal(started,2);assert.equal((await fetch(url,init)).status,429);assert.equal(started,2);
   } finally {release();await Promise.all([first,second]);server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+test('provider client/configuration and authorization failures are distinct from network failures',async()=>{
+  for(const [status,reason] of [[400,'invalid-response'],[401,'authentication-required'],[403,'authentication-required'],[404,'invalid-response']] as const) {
+    const doc=makeDocument('terms');
+    const result=await analyzeDocument(doc,config,async()=>new Response('{}',{status}));
+    assert.equal(result.reason,reason);assert.equal(result.grade,'Unrated');
+  }
 });

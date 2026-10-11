@@ -31,7 +31,7 @@ test('Gemini adapter uses server credentials and validates returned evidence',as
     assert.equal((init?.headers as Record<string,string>)['x-goog-api-key'],'test-only');
     const request=JSON.parse(String(init?.body));
     assert.equal(request.contents[0].parts[0].text,demoDocument.text);
-    assert.equal(request.generationConfig.responseFormat.text.mimeType,'application/json');
+    assert.equal(request.generationConfig.responseMimeType,'application/json');
     return new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(demoFindings())}]}}]}));
   }) as typeof fetch;
   assert.equal((await analyzeWithGemini(demoDocument,{apiKey:'test-only',model:'test-model'},fake)).length,3);

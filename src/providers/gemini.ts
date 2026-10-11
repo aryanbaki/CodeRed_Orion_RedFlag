@@ -4,7 +4,7 @@ import {type AnalysisDocument, type DocumentAssessment, type UnratedReason} from
 import {gradeOutput, requiredCategories, unrated} from '../server/grading.ts';
 export interface GeminiConfig { apiKey: string; model: string; timeoutMs?: number; retries?: number }
 export class ProviderError extends Error {
-  code: 'missing-configuration' | 'provider-timeout' | 'provider-quota' | 'provider-unavailable' | 'invalid-provider-output';
+  code: 'missing-configuration' | 'provider-timeout' | 'provider-quota' | 'provider-unavailable' | 'provider-authentication' | 'invalid-provider-output';
   constructor(code: ProviderError['code'], message:string) {super(message); this.code=code;}
 }
 export function validateGeminiConfig(config: GeminiConfig): void {
@@ -40,7 +40,7 @@ export async function requestGemini(text: string, instruction: string, schema: u
         method:'POST', signal:controller.signal,
         headers:{'Content-Type':'application/json','x-goog-api-key':config.apiKey},
         body:JSON.stringify({store:false, systemInstruction:{parts:[{text:instruction}]}, contents:[{role:'user',parts:[{text}]}],
-          generationConfig:{temperature:0.1, maxOutputTokens:8192, candidateCount:1, responseFormat:{text:{mimeType:'application/json',schema}}}})
+          generationConfig:{temperature:0.1, maxOutputTokens:8192, candidateCount:1, responseMimeType:'application/json',responseJsonSchema:schema}})
       });
       if (!response.ok) {
         void response.body?.cancel().catch(() => {});
@@ -54,7 +54,7 @@ export async function requestGemini(text: string, instruction: string, schema: u
           if (controller.signal.aborted) throw new ProviderError('provider-timeout', 'Gemini analysis timed out.');
           continue;
         }
-        throw new ProviderError(response.status === 429 ? 'provider-quota' : 'provider-unavailable', `Gemini request failed (${response.status}).`);
+        throw new ProviderError(response.status === 429 ? 'provider-quota' : [401,403].includes(response.status) ? 'provider-authentication' : [400,404,422].includes(response.status) ? 'invalid-provider-output' : 'provider-unavailable', `Gemini request failed (${response.status}).`);
       }
       const body = await boundedBody(response) as {promptFeedback?:{blockReason?:string}; candidates?:{finishReason?:string; content?:{parts?:{text?:string; thought?:boolean}[]}}[]};
       const candidate = body?.candidates?.[0];
@@ -97,5 +97,5 @@ export async function analyzeDocument(document: AnalysisDocument, config: Gemini
 }
 
 function wireReason(code:ProviderError['code']):UnratedReason {
-  return ({'missing-configuration':'network-error','provider-timeout':'timeout','provider-quota':'quota','provider-unavailable':'network-error','invalid-provider-output':'invalid-response'} as const)[code];
+  return ({'missing-configuration':'invalid-response','provider-timeout':'timeout','provider-quota':'quota','provider-unavailable':'network-error','provider-authentication':'authentication-required','invalid-provider-output':'invalid-response'} as const)[code];
 }

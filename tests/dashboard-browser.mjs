@@ -1,11 +1,12 @@
 import {chromium,expect} from '@playwright/test';
 import {build} from 'esbuild';
-import {mkdtemp,rm,cp,writeFile,mkdir} from 'node:fs/promises';
+import {mkdtemp,rm,cp,writeFile,mkdir,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import assert from 'node:assert/strict';
 const root=await mkdtemp(join(tmpdir(),'redflag-dashboard-')),extension=join(root,'extension'),profile=join(root,'profile');
 let context;
+const withSavedActions=(await readFile('src/extension/background.ts','utf8')).includes('redflag/recheck-site');
 await mkdir('dist/screenshots',{recursive:true});
 try {
   await cp(resolve('dist/extension'),extension,{recursive:true});
@@ -38,7 +39,8 @@ try {
   await dashboard.getByText('ToS;DR community reference · stale').click();await expect(dashboard.getByText(/Fixture: ToS;DR contributors/)).toBeVisible();
   await dashboard.screenshot({path:'dist/screenshots/my-sites-detail.png',fullPage:true});
   await dashboard.getByRole('button',{name:'Re-check site',exact:true}).click();
-  await expect(dashboard.locator('#status')).toContainText(/queued|unavailable|invalid/i);
+  await expect(dashboard.locator('#status')).toContainText(withSavedActions?/Recheck queued/:/unavailable|invalid/i);
+  if(withSavedActions){await expect.poll(async()=>helperPage.evaluate(async()=>{const sites=await testHistory.listHistory();return sites.find(s=>s.origin==='https://university.edu')?.documents.every(d=>d.status!=='pending');})).toBe(true);assert.equal((await helperPage.evaluate(()=>testHistory.listHistory())).find(s=>s.origin==='https://university.edu').documents[0].reason,'permission-required');}
   await expect(dashboard.getByRole('button',{name:'Re-check site',exact:true})).toBeEnabled();
   const update=state();update.updatedAt=new Date(Date.now()+1000).toISOString();update.documents[1]=doc('privacy','Unrated',true);
   await helperPage.evaluate(s=>testHistory.recordReview(s),update);

@@ -1,4 +1,4 @@
-# RedFlag 0.3.5
+# RedFlag 0.3.6
 
 A Chrome extension that combines community-reviewed insights and Google Gemini to explain terms and privacy policies, highlight sourced risks, and show personalized reminders before you agree.
 

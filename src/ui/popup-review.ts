@@ -28,8 +28,10 @@ export function renderPopupReview(container:HTMLElement,state:ReviewState|null,p
   const count=reviews.filter(d=>d.wordCount!==undefined),metadata=element('p',pending?'Analyzing…':!reviews.length?scanning||state?.discoveryPending?'Searching…':'Not found':grade==='Unrated'?'More evidence needed':'Reviewed','policy-meta');
   if(count.length)metadata.textContent=`${count.reduce((n,d)=>n+d.wordCount!,0).toLocaleString()} words${count.some(d=>d.coverage!=='complete')?' · Partial':''}`;
   row.append(metadata);
-  const action=element('button',pending?'Analyzing…':'Analyze','analyze-policy');action.type='button';action.disabled=pending||scanning||!prefs.enabled||!reviews.length;action.setAttribute('aria-label',`Analyze ${policyLabels[kind]}`);action.dataset.documentId=reviews[0]?.document.id??'';
-  action.addEventListener('click',()=>reviews.forEach(d=>analyze(d.document.id)));row.append(action);
+  if(reviews.length){
+   const action=element('button',pending?'Analyzing…':'Analyze','analyze-policy');action.type='button';action.disabled=pending||scanning||!prefs.enabled;action.setAttribute('aria-label',`Analyze ${policyLabels[kind]}`);action.dataset.documentId=reviews[0]?.document.id??'';
+   action.addEventListener('click',()=>reviews.forEach(d=>analyze(d.document.id)));row.append(action);
+  }
   grid.append(row);
  }
  fragment.append(grid);container.replaceChildren(fragment);

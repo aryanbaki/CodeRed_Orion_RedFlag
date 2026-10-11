@@ -45,7 +45,7 @@ test('valid independent Terms, Privacy and Additional results preserve trusted i
     assert.equal(result.coverage,'complete'); assert.equal(result.contentHash,d.contentHash);
     assert.equal(result.findings[0].sourceUrl,d.url); assert.equal(result.findings[0].startOffset,0);
     assert.equal(d.text.slice(result.findings[0].startOffset,result.findings[0].endOffset),clauses[requiredCategories(d)[0] as keyof typeof clauses][0]);
-    assert.equal(result.model,config.model); assert.equal(result.rubricVersion,'redflag.rubric.v1'); assert.equal(result.promptVersion,'redflag.prompt.v1');
+    assert.equal(result.model,config.model); assert.equal(result.rubricVersion,'redflag.rubric.v2'); assert.equal(result.promptVersion,'redflag.prompt.v1');
     assert.ok(Number.isFinite(Date.parse(result.analyzedAt))); assert.equal('documentUpdatedAt' in result,false);
     assert.equal('text' in result,false); assert.equal('text' in result.findings[0],false);
   }
@@ -55,6 +55,25 @@ test('server grades explicitly and duplicate risk quotations do not inflate pena
   const raw=output(); raw.findings.push({...raw.findings[0]}); assert.equal(gradeOutput(raw,document,config.model).grade,'B');
   const high=output('terms','high'); high.findings=high.assessments.map(a=>({category:a.category,severity:'high',quote:a.quote,explanation:'Explicit adverse provision in simulated evidence.'})); high.assessments=high.assessments.map(a=>({...a,status:'risk'}));
   assert.equal(gradeOutput(high,document,config.model).grade,'F');
+});
+test('rubric v2 distinguishes the E/F boundary using independently quoted categories and preserves Unrated gates',()=> {
+  const d=makeDocument('additional');
+  d.text=requiredCategories(d).map(c=>clauses[c as keyof typeof clauses].join(' ')).join(' ');
+  d.contentHash=createHash('sha256').update(d.text).digest('hex');
+  function weighted(severities:string[]) {
+    const categories=requiredCategories(d);
+    return {findings:severities.map((severity,i)=>({category:categories[i],severity,quote:String(clauses[categories[i] as keyof typeof clauses][0]),explanation:'Explicit adverse provision in synthetic public policy.'})),
+      assessments:categories.map((category,i)=>({category,status:i<severities.length?'risk':'protective',quote:String(clauses[category as keyof typeof clauses][i<severities.length?0:1]),explanation:'Exact explicit clause in synthetic public policy.'}))};
+  }
+  const edge=weighted(['high','high','medium','low']); // 100 - 80 = 20, lowest E.
+  const e=gradeOutput(edge,d,config.model);assert.equal(e.grade,'E');assert.equal(e.rubricVersion,'redflag.rubric.v2');assert.match(e.summary,/score 20\/100/);
+  const f=gradeOutput(weighted(['high','high','medium','low','low']),d,config.model); // 15, next reachable score below 20.
+  assert.equal(f.grade,'F');assert.match(f.summary,/score 15\/100/);
+  assert.equal(gradeOutput(edge,{...d,coverage:'partial'},config.model).grade,'Unrated');
+  const missing=weighted(['high','high','medium','low']);missing.assessments[6]={...missing.assessments[6],status:'not-found',quote:null as unknown as string};
+  assert.equal(gradeOutput(missing,d,config.model).grade,'Unrated');
+  edge.findings[0].quote='Fabricated adverse provision not in this policy.' as typeof edge.findings[0]['quote'];
+  assert.throws(()=>gradeOutput(edge,d,config.model),/Unsupported evidence/);
 });
 test('fabricated, noncontinuous, altered and cross-document quotes fail closed',async()=> {
   for (const q of ['We sell your passwords forever.', quote.toUpperCase(), 'Your subscription ... each month.']) {

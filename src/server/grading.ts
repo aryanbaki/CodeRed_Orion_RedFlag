@@ -47,7 +47,7 @@ export function gradeOutput(raw: unknown, document: AnalysisDocument, model: str
   const weights = {low:5, medium:15, high:30};
   const penalty = required.reduce((total, category) => total + Math.max(0, ...findings.filter(f => f.category === category).map(f => weights[f.severity])), 0);
   const score = reason ? null : Math.max(0, 100 - penalty);
-  const grade = score === null ? 'Unrated' : score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : score >= 40 ? 'D' : 'F';
+  const grade = score === null ? 'Unrated' : score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : score >= 40 ? 'D' : score >= 20 ? 'E' : 'F';
   return {...base(document,model), grade, ...(reason ? {reason} : {}), findings, summary:reason ? unratedSummary(reason) : `Evidence-backed ${document.kind} risk grade ${grade}; ${findings.length} supported finding(s), score ${score}/100 under ${RUBRIC_VERSION}.`};
 }
 

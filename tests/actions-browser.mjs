@@ -39,6 +39,7 @@ try {
  const action=(mode,documentId)=>controls.evaluate(async ({mode,documentId,tabId})=>{const state=(await chrome.storage.session.get('redflag.jobs.v1'))['redflag.jobs.v1'].sessions[tabId].state;return chrome.runtime.sendMessage({type:'redflag/analyze',mode,pageKey:state.pageKey,documentId,tabId});},{mode,documentId,tabId});
  await expect.poll(async()=> (await state())?.documents.every(d=>d.reason==='ai-consent-required')).toBe(true);
  assert.equal(await worker.evaluate(()=>requests.filter(r=>r.body).length),0);
+ const untrusted=await controls.evaluate(async tabId=>{const [result]=await chrome.scripting.executeScript({target:{tabId},func:async()=>chrome.runtime.sendMessage({type:'redflag/analyze',mode:'all',pageKey:'forged'})});return result.result;},tabId);assert.equal(untrusted.code,'untrusted');
  const first=await action('all');assert.equal(first.ok,true);assert.equal(first.queuedDocumentIds.length,2);
  await expect.poll(async()=> (await state()).documents.every(d=>d.status!=='pending')).toBe(true);
  assert.equal(await worker.evaluate(()=>requests.filter(r=>r.body).length),0);
@@ -87,6 +88,11 @@ try {
  await page.waitForTimeout(500);
  assert.equal(await reopened.evaluate(async()=> (await chrome.storage.local.get('redflag.history.v1'))['redflag.history.v1'].sites.length),0);
  const deletedRecheck=await reopened.evaluate(async siteOrigin=>chrome.runtime.sendMessage({type:'redflag/recheck-site',siteOrigin}),savedOrigin);assert.equal(deletedRecheck.code,'history-unavailable');
+ await reopened.evaluate(async ({tabId})=>{const state=(await chrome.storage.session.get('redflag.jobs.v1'))['redflag.jobs.v1'].sessions[tabId].state;return chrome.runtime.sendMessage({type:'redflag/analyze',mode:'recheck',tabId,pageKey:state.pageKey});},{tabId});
+ await page.goto('about:blank');
+ await expect.poll(()=>worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),tabId)).toBe('?');
+ await page.waitForTimeout(500);assert.equal(await get(),undefined);
+ assert.equal(await worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),tabId),'?');
  const requests=await worker.evaluate(()=>globalThis.requests);assert.ok(requests.every(r=>r.credentials==='omit'));assert.ok(requests.every(r=>!r.body?.includes('email')));
  console.log('Actions browser checks passed: actual worker one/all/recheck, cache, duplicate joining, bounded concurrency/timeout, independent mixed failures, AI disabled, permissions, popup close/reopen, stale generation and per-tab badges; public responses and Gemini mocked.');
 }finally{await context?.close();await rm(root,{recursive:true,force:true});}

@@ -1,5 +1,7 @@
 # Shared worker contracts — v1
 
+Analysis-action ownership was subsequently assigned to `codex/analysis-actions`, with popup and history presentation in their separate worker branches. See [analysis-actions.md](analysis-actions.md) for the trusted typed commands, additive safe failure details, shared conservative summary rule, integration order and verification evidence. Earlier role numbers below describe the original assignment.
+
 Canonical types: `src/core/contracts.ts`. This is an additive contract; legacy `src/core/evidence.ts` and the manual/demo framework remain intact. All workers should bring the shared-contract commit from main into their own worktree before binding their code. Request integration-owner changes rather than independently changing the shared shape.
 
 ## Ownership

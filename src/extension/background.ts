@@ -167,7 +167,9 @@ async function pump() {
       if (index >= 0) active.state.documents[index] = updated;
       await publish(job.tabId,job.pageKey);
     }).catch(() => {}).finally(async () => {
-      snapshot.jobs = snapshot.jobs.filter(j => j !== job);inFlight.delete(key);running--;await persist();void pump();
+      snapshot.jobs = snapshot.jobs.filter(j => j !== job);inFlight.delete(key);running--;
+      if(job.tabId<0 && !snapshot.jobs.some(j=>j.tabId===job.tabId)) delete snapshot.sessions[job.tabId];
+      await persist();void pump();
     });
   }
   } finally {pumping=false;}

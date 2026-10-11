@@ -10,3 +10,6 @@ await build({entryPoints:['src/extension/background.ts'],bundle:true,format:'esm
 await build({entryPoints:['src/extension/offscreen.ts'],bundle:true,format:'iife',platform:'browser',target:'chrome120',outfile:'dist/extension/offscreen.js'});
 await copyFile('src/extension/offscreen.html','dist/extension/offscreen.html');
 await build({entryPoints:['src/extension/content.ts'],bundle:true,format:'iife',platform:'browser',target:'chrome120',outfile:'dist/extension/content.js'});
+
+await build({entryPoints:['src/extension/dashboard.ts'],bundle:true,format:'esm',platform:'browser',target:'chrome120',outfile:'dist/extension/dashboard.js'});
+for (const name of ['dashboard.html','dashboard.css']) await copyFile('src/extension/'+name,'dist/extension/'+name);

@@ -93,3 +93,7 @@ Not verified: live Gemini model availability, structured output acceptance for t
 ### Configuration follow-up — 2026-10-11
 
 Added explicit Gemini free/paid/default profiles while retaining legacy `GEMINI_API_KEY` deployments. Blank OpenAI, Claude and custom-provider slots are reserved for future adapters; only Gemini is implemented. `npm run check` passed with 22 test groups, including explicit key/model selection, no implicit paid-key fallback, unsupported-provider rejection and exclusion of inactive credentials from active configuration. An ignored owner-only `.env` was created with blank provider keys and local demo defaults and opened in the side editor for user entry. No keys were copied into chat, committed, or used for live requests.
+
+### Saved credential configuration — 2026-10-11
+
+The user saved both Gemini profile keys locally. Verified configuration without displaying secret values: the selected profile is `free`, the model is `gemini-3.5-flash-lite`, and both key fields are present. A live authenticated Gemini `models.get` request using only the selected free-profile key returned HTTP 200 and reported `generateContent` support. This is live credential/model metadata verification, not a live document analysis or verification of the project's billing tier. No policy text was transmitted, and the paid-profile key was not used. The local server started on `127.0.0.1:8787` and responded to the allowed-origin OPTIONS preflight with HTTP 204. `.env` remains ignored by Git with owner-only file permissions; no credential values are committed.

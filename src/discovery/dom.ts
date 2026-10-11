@@ -4,7 +4,7 @@ export interface DiscoveredLink {url: string; kind: LegalKind; label: string; el
 const legal = /\b(additional\s*terms|terms\s*(?:of\s*(?:service|use)|(?:and|&)\s*conditions)|privacy\s*polic(?:y|ies))\b/i;
 const shortLegal = /^(terms|privacy)$/i;
 const agreement = /\b(sign\s*up|register|create\s*(?:an?\s*)?account|checkout|onboarding|consent|agree|accept|by\s*(?:continuing|proceeding)|get\s*started)\b/i;
-const explicitAgreement = /\b(consent|agree|accept|by\s*(?:continuing|proceeding))\b/i;
+const explicitAgreement = /\b((?:i|you|we)\s+(?:agree|accept)|by\s*(?:continuing|proceeding|signing\s*up)|agree\s+to|accept\s+(?:the|these|our)\s+(?:terms|privacy)|consent\s+to)\b/i;
 function staticText(element: Element): string {
   const copy = element.cloneNode(true) as Element;
   copy.querySelectorAll('input,textarea,select,script,style,[contenteditable], [data-redflag-ui]').forEach(e => e.remove());
@@ -77,6 +77,7 @@ export function observeLegalLinks(document: Document, emit: (links: DiscoveredLi
         if (target) roots.add(target.closest('form,dialog,[role="dialog"],section') ?? target.parentElement ?? target);
       } else {
         for (const node of record.addedNodes) if (node instanceof Element && !node.matches('[data-redflag-ui]')) roots.add(node.closest('form,dialog,[role="dialog"],section') ?? node);
+        if ([...record.addedNodes].some(node=>node instanceof Text) && record.target instanceof Element) roots.add(record.target.closest('form,dialog,[role="dialog"],section') ?? record.target);
         if ([...record.removedNodes].some(node => !(node instanceof Element && node.matches('[data-redflag-ui]'))) && record.target instanceof Element) roots.add(record.target);
       }
     }

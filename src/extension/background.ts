@@ -218,7 +218,8 @@ async function scanTab(tabId:number):Promise<ScanCurrentResponse> {
   catch{return reject('permission-required','Allow site access, or open RedFlag using its toolbar button on this page.');}
   const documentId=frames[0]?.documentId;
   const current=await chrome.tabs.get(tabId).catch(()=>undefined);
-  if(epoch!==(navigationEpoch.get(tabId) ?? 0) || !current?.url || safePageUrl(current.url)!==pageUrl)return reject('stale-page','The page changed during discovery. Try again.');
+  let samePage=false;try{samePage=!!current?.url && safePageUrl(current.url)===pageUrl;}catch{}
+  if(epoch!==(navigationEpoch.get(tabId) ?? 0) || !samePage)return reject('stale-page','The page changed during discovery. Try again.');
   // The browser, not a content-script payload, grants this current document access.
   manualAccess.set(tabId,{pageUrl,documentId});
   try {await chrome.tabs.sendMessage(tabId,{type:'redflag/internal-scan'},documentId ? {documentId} : {frameId:0});}
@@ -232,7 +233,7 @@ async function scanCurrent(message:ScanCurrentCommand,sender:chrome.runtime.Mess
   const tabId=message.tabId ?? (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id;
   if(!Number.isInteger(tabId) || tabId!<0)return {ok:false,code:'unsupported-page',error:'No website tab is available.'};
   let operation=scans.get(tabId!);
-  if(!operation){operation=scanTab(tabId!);scans.set(tabId!,operation);void operation.finally(()=>{if(scans.get(tabId!)===operation)scans.delete(tabId!);});}
+  if(!operation){operation=scanTab(tabId!).catch(()=>({ok:false as const,code:'stale-page' as const,error:'Discovery is unavailable or the page changed. Try again.'}));scans.set(tabId!,operation);void operation.then(()=>{if(scans.get(tabId!)===operation)scans.delete(tabId!);});}
   return operation;
 }
 async function analysisAction(message:AnalysisCommand,sender:chrome.runtime.MessageSender):Promise<AnalysisActionResponse> {
@@ -400,8 +401,8 @@ chrome.storage.onChanged.addListener((changes,area) => {
   });
 });
 chrome.alarms.onAlarm.addListener(alarm => {if (alarm.name === 'redflag-recovery') void pump();});
-chrome.runtime.onInstalled.addListener(() => {void chrome.alarms.create('redflag-recovery',{periodInMinutes:0.5});void syncContentScripts();});
-chrome.runtime.onStartup.addListener(() => {void chrome.alarms.create('redflag-recovery',{periodInMinutes:0.5});void syncContentScripts();void pump();});
+chrome.runtime.onInstalled.addListener(() => {void chrome.alarms.create('redflag-recovery',{periodInMinutes:0.5});accessUpdates=accessUpdates.catch(()=>{}).then(()=>updateAccess(true));});
+chrome.runtime.onStartup.addListener(() => {void chrome.alarms.create('redflag-recovery',{periodInMinutes:0.5});accessUpdates=accessUpdates.catch(()=>{}).then(()=>updateAccess(true));void pump();});
 void initialized.then(() => {void chrome.alarms.create('redflag-recovery',{periodInMinutes:0.5});void pump();});
 
 chrome.tabs.onActivated.addListener(({tabId})=>{void initialized.then(async()=>{

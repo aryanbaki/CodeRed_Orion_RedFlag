@@ -1,5 +1,7 @@
 # Architecture decisions
 
+Current ordinary-site scanning, activeTab actions, permission lifecycle and consent-only floating-warning behavior are documented in [site-discovery.md](site-discovery.md). Earlier framework/stage descriptions below are historical.
+
 ## Current framework
 
 Chrome toolbar action → activeTab permission → user-triggered script reads selected/main text → popup source preview. Priorities live in `chrome.storage.local`. Captured text remains in popup memory. Demo findings are fictional, deterministic and visibly labeled. Network access is disabled by the popup content security policy.

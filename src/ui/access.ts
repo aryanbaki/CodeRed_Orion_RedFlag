@@ -34,7 +34,8 @@ export async function renderSiteAccess(container: HTMLElement, status: HTMLEleme
     row.append(label,button);container.append(row);
   }
   const allOrigins=['http://*/*','https://*/*'];
-  const allAllowed=await chrome.permissions.contains({origins:allOrigins});
+  const grants=(await chrome.permissions.getAll()).origins ?? [];
+  const allAllowed=await chrome.permissions.contains({origins:allOrigins}) || grants.some(pattern=>allOrigins.includes(pattern));
   const broad=element('div');broad.className='access-row';
   const disclosure=element('p','Optional all-sites access allows automatic legal-link discovery on every HTTP(S) website. It reads legal link names and URLs, retrieves permitted public legal documents without cookies, and saves checked-site reviews locally. AI transmission still requires separate opt-in. You can revoke this access.','note');
   const allButton=element('button',allAllowed ? 'Revoke all-sites access' : 'Allow automatic discovery on all sites');allButton.type='button';allButton.dataset.origin='all-sites';

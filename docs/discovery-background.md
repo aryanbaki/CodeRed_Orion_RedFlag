@@ -1,5 +1,7 @@
 # Agent 1: automatic discovery and background processing
 
+This is the original implementation record. [Ordinary-page discovery](site-discovery.md) supersedes its consent-only and reload-after-grant limitations: current discovery includes permitted footers, trusted activeTab scans and immediate granted-tab injection. Current server setup uses rubric v2.
+
 Branch: `codex/discovery-background`, based on fetched `origin/main` at `f83562e`, plus canonical shared-contract commit `0e45ede` (cherry-picked as `bad85a9`). No changes to shared contracts or legacy evidence/provider APIs. The original checkout and its untracked `.env.example` are untouched.
 
 ## Integration

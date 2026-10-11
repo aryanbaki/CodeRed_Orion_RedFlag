@@ -1,3 +1,4 @@
+import {requestCurrentScan} from '../core/discovery-actions.ts';
 import {applyTheme} from '../ui/theme.ts';
 import {renderPopupReview} from '../ui/popup-review.ts';
 import {requestAnalysis,type AnalysisMode} from '../core/analysis-actions.ts';
@@ -27,20 +28,27 @@ let activePageUrl: string | null = null;
 let demoVisible = false;
 let saving = false;
 let actionBusy=false;
+let scanIssue:string|null=null;
 const allButton=document.querySelector<HTMLButtonElement>('#analyze-all')!;
 const recheckButton=document.querySelector<HTMLButtonElement>('#recheck')!;
 async function analyze(mode:AnalysisMode,documentId?:string) {
-  if(!state || actionBusy || !preferences?.aiConsent.enabled) return;
+  if(!state || actionBusy || (!preferences?.aiConsent.enabled && mode!=='recheck')) return;
   actionBusy=true;paint();
   try {const response=await requestAnalysis({type:'redflag/analyze',mode,pageKey:state.pageKey,...(documentId ? {documentId} : {})});
-    if(response.ok && response.state.pageKey===state.pageKey) {state=response.state;paint();document.querySelector('#action-status')!.textContent='Analysis queued. Results update independently.';}
+    if(response.ok && response.state.pageKey===state.pageKey) {state=response.state;paint();document.querySelector('#action-status')!.textContent='Queued · waiting for results.';}
     else if(!response.ok) document.querySelector('#action-status')!.textContent=response.error;
   } catch {document.querySelector('#action-status')!.textContent='Could not queue analysis. Try again.';} finally {actionBusy=false;paint();}
 }
 allButton.addEventListener('click',()=>void analyze('all'));
-recheckButton.addEventListener('click',()=>void analyze('recheck'));
+async function scanCurrent(){
+  if(actionBusy || !activePageUrl || !preferences.enabled)return;
+  actionBusy=true;scanIssue=null;paint();document.querySelector('#action-status')!.textContent='Checking policy links…';
+  try{const response=await requestCurrentScan();if(response.ok){if(response.state?.pageUrl===activePageUrl)state=response.state;else if(!response.state)state=null;document.querySelector('#action-status')!.textContent=state?.documents.length?'Policy links updated.':'';}else{scanIssue=response.code;document.querySelector('#action-status')!.textContent=response.code==='permission-required'?'':response.error;}}catch{document.querySelector('#action-status')!.textContent='Could not check this site. Try again.';}finally{actionBusy=false;paint();refreshAccess();}
+}
+recheckButton.addEventListener('click',()=>void (!state?.documents.length ? scanCurrent() : analyze('recheck')));
 function openSummary(origin?:string) {void chrome.tabs.create({url:chrome.runtime.getURL('dashboard.html')+(origin ? '#site='+encodeURIComponent(origin) : '')});}
 document.querySelector('#open-summary')!.addEventListener('click',()=>openSummary(activePageUrl ? new URL(activePageUrl).origin : undefined));
+document.querySelector('#setup-site')!.addEventListener('click',()=>{const settings=document.querySelector<HTMLDetailsElement>('#settings')!;settings.open=true;settings.scrollIntoView();document.querySelector<HTMLElement>('#access-heading')!.setAttribute('tabindex','-1');document.querySelector<HTMLElement>('#access-heading')!.focus();});
 document.querySelector('#settings-link')!.addEventListener('click',event=>{event.preventDefault();const settings=document.querySelector<HTMLDetailsElement>('#settings')!;settings.open=true;settings.scrollIntoView();settings.querySelector('summary')!.focus();});
 const recent=mountRecentItems(document.querySelector('#recent-items')!,[],openSummary);
 async function refreshRecent() {try {recent.update(await listHistory());}catch {document.querySelector('#recent-items')!.textContent='Local checked-site history is unavailable.';}}
@@ -76,10 +84,19 @@ function paint() {
   aiToggle.disabled=saving; demoButton.disabled=false;
   aiToggle.textContent=preferences.aiConsent.enabled ? 'Turn off background AI analysis' : 'Enable background AI analysis';
   aiState.textContent=preferences.aiConsent.enabled ? 'On. Public legal documents may be analyzed automatically in the background.' : 'Off. New AI transmissions are disabled. Local and community results may still be available.';
-  if (state) renderReview(results,state,preferences,status);
+  if (state?.documents.length) renderReview(results,state,preferences);
+  const hasDocuments=Boolean(state?.documents.length);
+  document.querySelector('#empty-state')!.toggleAttribute('hidden',hasDocuments);
+  document.querySelector('#empty-heading')!.textContent=activePageUrl ? (scanIssue==='permission-required'?'Allow site access':'Check this website') : 'Open a website';
+  document.querySelector('#empty-copy')!.textContent=activePageUrl ? (scanIssue==='permission-required'?'Allow RedFlag to read public policy links on this site.':'No public policies found yet. Check this site or allow reading access.') : 'Open an HTTP or HTTPS website to find its public policies.';
+  document.querySelector('#setup-site')!.toggleAttribute('hidden',!activePageUrl);
+  status.textContent=activePageUrl || hasDocuments ? '' : 'This browser page cannot be reviewed.';
+  allButton.hidden=!hasDocuments;
+  document.querySelector('#open-summary')!.toggleAttribute('hidden',!hasDocuments);
   renderPopupReview(document.querySelector('#compact-review')!,state,preferences,id=>void analyze('one',id));
-  allButton.disabled=recheckButton.disabled=actionBusy || !state?.documents.length || !preferences.enabled || !preferences.aiConsent.enabled;
-  document.querySelector('#evidence')!.toggleAttribute('hidden',!state);
+  allButton.disabled=actionBusy || !state?.documents.length || !preferences.enabled || !preferences.aiConsent.enabled;
+  recheckButton.disabled=actionBusy || !activePageUrl || !preferences.enabled;
+  document.querySelector('#evidence')!.toggleAttribute('hidden',!state?.documents.length);
   renderDemo();
 }
 async function persist(next: typeof preferences) {
@@ -100,9 +117,9 @@ async function init() {
   try {
     const response: ExtensionResponse = await chrome.runtime.sendMessage({type:'redflag/get-state'});
     if (response?.ok && response.state && response.state.pageUrl === activePageUrl) {state=response.state;paint();}
-    else if(activePageUrl) status.textContent=response && !response.ok ? response.error : 'No supported consent screen has been discovered in the active tab.';
+    else if(activePageUrl && response && !response.ok)document.querySelector('#action-status')!.textContent=response.error;
   } catch {status.textContent='Automatic discovery is not connected in this build. No real website analysis is available.';}
-  refreshAccess();
+  paint();refreshAccess();await scanCurrent();
 }
 chrome.storage.onChanged.addListener((changes,area)=>{
   if (area === 'local' && changes[PREFERENCES_STORAGE_KEY]) {
@@ -110,7 +127,7 @@ chrome.storage.onChanged.addListener((changes,area)=>{
   }
 });
 chrome.runtime.onMessage.addListener(message=>{
-  if (message?.type === 'redflag/state' && message.state?.schemaVersion === 1 && message.state.pageUrl === activePageUrl && (!state || message.state.pageKey === state.pageKey)) {state=message.state;paint();refreshAccess();}
+  if (message?.type === 'redflag/state' && message.state?.schemaVersion === 1 && message.state.pageUrl === activePageUrl && (!state || message.state.pageKey === state.pageKey)) {state=message.state;scanIssue=null;document.querySelector('#action-status')!.textContent='';paint();refreshAccess();}
 });
 void init().catch(()=>{status.textContent='Settings could not be loaded. Background AI remains off.';aiToggle.disabled=true;});
 document.querySelector('#demo')!.addEventListener('click',()=>{demoVisible=true;renderDemo();previewStatus.textContent='Fictional example only. These findings do not describe your current page.';});

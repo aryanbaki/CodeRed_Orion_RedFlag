@@ -1,0 +1,122 @@
+[
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/popup-fixture-ai-disabled.png",
+    "name": "popup-fixture-ai-disabled",
+    "state": "ai-disabled",
+    "synthetic": true,
+    "surface": "popup",
+    "font": "temporary system monospace"
+  },
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/popup-fixture-analyzing.png",
+    "name": "popup-fixture-analyzing",
+    "state": "analyzing",
+    "synthetic": true,
+    "surface": "popup",
+    "font": "temporary system monospace"
+  },
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/popup-fixture-discovering.png",
+    "name": "popup-fixture-discovering",
+    "state": "discovering",
+    "synthetic": true,
+    "surface": "popup",
+    "font": "temporary system monospace"
+  },
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/popup-fixture-empty.png",
+    "name": "popup-fixture-empty",
+    "state": "empty",
+    "synthetic": true,
+    "surface": "popup",
+    "font": "temporary system monospace"
+  },
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/popup-fixture-evidence.png",
+    "name": "popup-fixture-evidence",
+    "state": "evidence",
+    "synthetic": true,
+    "surface": "popup",
+    "font": "temporary system monospace"
+  },
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/popup-fixture-inaccessible.png",
+    "name": "popup-fixture-inaccessible",
+    "state": "inaccessible",
+    "synthetic": true,
+    "surface": "popup",
+    "font": "temporary system monospace"
+  },
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/popup-fixture-partial.png",
+    "name": "popup-fixture-partial",
+    "state": "partial",
+    "synthetic": true,
+    "surface": "popup",
+    "font": "temporary system monospace"
+  },
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/popup-fixture-permission-empty.png",
+    "name": "popup-fixture-permission-empty",
+    "state": "permission-empty",
+    "synthetic": true,
+    "surface": "popup",
+    "font": "temporary system monospace"
+  },
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/popup-fixture-permission-required.png",
+    "name": "popup-fixture-permission-required",
+    "state": "permission-required",
+    "synthetic": true,
+    "surface": "popup",
+    "font": "temporary system monospace"
+  },
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/popup-fixture-rated.png",
+    "name": "popup-fixture-rated",
+    "state": "rated",
+    "synthetic": true,
+    "surface": "popup",
+    "font": "temporary system monospace"
+  },
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/popup-fixture-recent.png",
+    "name": "popup-fixture-recent",
+    "state": "recent",
+    "synthetic": true,
+    "surface": "popup",
+    "font": "temporary system monospace"
+  },
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/popup-fixture-settings.png",
+    "name": "popup-fixture-settings",
+    "state": "settings",
+    "synthetic": true,
+    "surface": "popup",
+    "font": "temporary system monospace"
+  },
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/popup-fixture-unrated.png",
+    "name": "popup-fixture-unrated",
+    "state": "unrated",
+    "synthetic": true,
+    "surface": "popup",
+    "font": "temporary system monospace"
+  },
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/popup-restricted-browser.png",
+    "name": "popup-restricted-browser",
+    "state": "restricted-browser",
+    "synthetic": false,
+    "surface": "popup",
+    "font": "temporary system monospace"
+  },
+  {
+    "path": "/Users/aryanbaki/.codex/worktrees/popup-clarity/CodeRed Orion - RedFlag/docs/design/clarity-screenshots/proactive-ui-fixture.png",
+    "name": "proactive-ui-fixture",
+    "state": "proactive-ui-fixture",
+    "synthetic": true,
+    "surface": "consent overlay",
+    "font": "temporary system monospace"
+  }
+]

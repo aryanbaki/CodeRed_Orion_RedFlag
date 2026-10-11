@@ -1,0 +1,15 @@
+// Actual unpacked popup + worker on ordinary public-page fixture. Retrieval simulated; AI disabled.
+import {chromium,expect} from '@playwright/test';
+import {mkdtemp,rm,cp,readFile,writeFile} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join,resolve} from 'node:path';import assert from 'node:assert/strict';
+const root=await mkdtemp(join(tmpdir(),'redflag-current-popup-'));let context;
+try{
+ const extension=join(root,'extension');await cp(resolve('dist/extension'),extension,{recursive:true});const manifest=JSON.parse(await readFile(join(extension,'manifest.json'),'utf8'));manifest.host_permissions=['https://service.com/*'];await writeFile(join(extension,'manifest.json'),JSON.stringify(manifest));
+ context=await chromium.launchPersistentContext(join(root,'profile'),{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker'),id=new URL(worker.url()).host;
+ await worker.evaluate(()=>{globalThis.reads=0;globalThis.fetch=async()=>{reads++;return new Response('Synthetic public policy fixture. No provider analysis occurs.',{headers:{'content-type':'text/plain'}});};});
+ await context.route('https://service.com/**',route=>route.fulfill({body:'<main><h1>Ordinary website</h1></main><footer><a href="/terms">Terms</a><a href="/privacy">Privacy</a></footer>',contentType:'text/html'}));
+ const site=await context.newPage();await site.goto('https://service.com/home');const popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup.html`);const tabId=await popup.evaluate(async()=> (await chrome.tabs.query({url:'https://service.com/home'}))[0].id);await popup.evaluate(async id=>chrome.tabs.update(id,{active:true}),tabId);await popup.reload();
+ await expect(popup.locator('#domain')).toHaveText('service.com');await expect(popup.locator('.policy-row')).toHaveCount(2);await expect(popup.locator('.grade-tile')).toHaveText('?');await expect(popup.locator('#recheck')).toBeEnabled();await expect(popup.locator('#analyze-all')).toBeDisabled();await expect(popup.locator('#compact-review')).toContainText('AI disabled');
+ await expect.poll(()=>worker.evaluate(()=>reads)).toBeGreaterThan(0);const before=await worker.evaluate(()=>reads);await popup.locator('#recheck').click();await expect.poll(()=>worker.evaluate(()=>reads)).toBeGreaterThan(before);await expect(popup.locator('#recheck')).toBeEnabled();
+ assert.equal(await site.locator('#redflag-overview').count(),0);const stored=await worker.evaluate(async tabId=>(await chrome.storage.session.get('redflag.jobs.v1'))['redflag.jobs.v1'].sessions[tabId].state,tabId);assert.equal(stored.context,'browsing');assert.ok(stored.documents.every(d=>d.grade==='Unrated'));
+ console.log('Actual popup current-tab checks pass: ordinary footer discovery, browsing context, compact Unrated, AI-disabled Analyze, enabled Recheck refetches without opt-in. Public retrieval simulated; no live AI.');
+}finally{await context?.close();await rm(root,{recursive:true,force:true});}

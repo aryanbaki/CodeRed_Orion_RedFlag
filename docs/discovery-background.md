@@ -1,0 +1,50 @@
+# Agent 1: automatic discovery and background processing
+
+Branch: `codex/discovery-background`, based on fetched `origin/main` at `f83562e`, plus canonical shared-contract commit `0e45ede` (cherry-picked as `bad85a9`). No changes to shared contracts or legacy evidence/provider APIs. The original checkout and its untracked `.env.example` are untouched.
+
+## Integration
+
+1. Integrate Agent 1's implementation commit and the other worker commits through the integration owner. Do not merge this branch into main independently. Agent 3's `src/ui/overview.ts` supplies `mountOverview`; Agent 2 supplies `POST /api/analyze`. The source/build automatically binds the real overview when present. A type declaration and visibly warned no-op bridge let this branch build alone; that standalone build has **no proactive visual warning** and is not the complete product. Remove the bridge after integration if desired.
+2. Run `npm ci`, `npm run check`, `npm run test:discovery-browser`, and `npm run test:browser`. The CI workflow includes the discovery browser suite. The merged UI branch's own tests remain required.
+3. Load `dist/extension` in Chrome 120+. Agent 3's settings requests exact optional page and document origin permissions. Reading permissions are independent of AI consent. Reload the website after the first site grant so the dynamically registered content script runs. The worker never automatically prompts for permissions. Revoked/missing document-origin permission yields `permission-required`.
+4. Configure the backend only from a trusted extension context at `chrome.storage.local['redflag.backend.v1']`: `{baseUrl, accessToken, model, promptVersion, rubricVersion}`. Use Agent 2's documented local `http://127.0.0.1:8787` or a public HTTPS origin, and grant that endpoint origin. Match `GEMINI_MODEL`, `redflag.prompt.v1`, and `redflag.rubric.v1`. The bearer token is a local-demo access credential, never a bundled production secret. Both local and session storage are restricted to trusted extension contexts; content scripts obtain preferences through validated runtime messages. Never paste real keys into chat or bundle them.
+5. AI remains disabled until canonical stored consent contains affirmative `grantedAt` and the current notice version. Revocation aborts active transports and prevents queued/new transmissions. Already transmitted content cannot be recalled. Existing Unrated consent-required documents are queued again upon valid opt-in.
+6. To use community references, explicitly install a licensed catalog at `redflag.community-catalog.v1`: an array of `{domains: ['exact.declared.host'], reference: CommunityReference}`. Preserve ToS;DR contribution attribution/license and source links; obtain authorized data rather than copying upstream extension code or credentials. No catalog is bundled; there is no automatic domain query. An empty catalog yields no community references, never a safety rating. The adapter matches only explicitly declared hosts and document URLs, rejecting title/ranking/lookalike/tenant inference. Service ratings do not suppress independent document analysis. Reference-only document records lack content hash/coverage/evidence, so cannot suppress it either.
+
+## Behavior and bounds
+
+Discovery recognizes Terms of Service, Terms of Use, Terms and Conditions (including `&`), Privacy Policy/Policies, and Additional Terms through link text, `aria-label`, `aria-labelledby`, and titles in agreement contexts. It resolves actual DOM `href` against `document.baseURI`, strips fragments, and preserves independent scopes even when URLs coincide. Targeted 150 ms mutation batches track changed links/dialogs, retire removed/replaced documents, and exclude the warning's own DOM. Route-path navigation and BFCache restoration restart discovery; browser document IDs and background page generations prevent stale result delivery.
+
+Bounds: 500 links per scanned subtree, 250 descendants per context check, six ancestor levels, 40 changed roots per batch, 24 agreements per page, two simultaneous jobs, 12-second retrieval deadline, 256 KB response byte limit, 60,000 extracted characters, 30-second analysis deadline and 120 KB analysis response limit. Excessively large/complex screens are outside tested discovery coverage. Concurrent downloads of the same URL share one promise. Sessions/jobs survive worker suspension in `storage.session`; attempt budgets are written before network work, with at most two starts per job and a 30-second recovery alarm. Completed jobs are removed. State targets the browser's original document, while popup runtime broadcasts are guarded by generation.
+
+Only credential-free public HTTP(S) documents are fetched. Requests omit cookies and referrers; no tab navigation, policy-link click, acceptance, checkbox mutation or submission occurs. Queries, credentials, nonstandard document ports, IP literals, local/private-looking hosts and common IP wildcard DNS hosts are rejected. Query-bearing legal URLs are excluded rather than forwarding possible account/session tokens; a public query-free alternative is needed. No private or authenticated page contents are submitted by content scripts.
+
+Fresh downloaded text is hashed with SHA-256. Eligible analysis cache entries must match URL, kind, content hash, complete coverage, model, prompt and rubric, and expire within 24 hours. Cached quotations are revalidated against the new text; invalid/stale entries trigger consented fallback. At most 50 unexpired analyses are retained. This deliberately re-fetches documents before cache reuse to detect changes; a cache download timestamp never becomes a human-review date. Each document independently preserves pending/ready/Unrated, attribution, coverage and freshness.
+
+A detached offscreen DOMParser extracts downloaded legal text, removes scripts/forms/inputs/account controls and structural navigation, and never renders remote HTML. Login pages/password forms are rejected. HTML extraction is conservatively **partial**, so the backend cannot assign a whole-document grade to heuristic captures; plain text responses preserve complete transfer coverage. Unsupported PDFs, oversized/empty/partial responses, 401/403/404, timeouts and missing permissions stay visibly Unrated. No raw legal text is persisted in job/state messages or logs; only source metadata and supported assessment quotes are cached.
+
+## Verification
+
+- `npm run check`: strict TypeScript, 16 test cases (11 new focused discovery/background cases plus five preserved legacy cases), extension build.
+- `npm run test:discovery-browser`: unpacked MV3 extension, actual content script, worker, offscreen DOMParser and storage. Controlled browser fixtures cover all four context paths and five legal labels, accessible names, relative/cross-origin URLs, duplicate links, dynamically added dialogs, link replacement, route generation changes, permission/HTTP/auth/redirect failures, no-consent traffic, consented simulated transport, exclusion of form/script contents, revocation of a stalled request, responsive inputs, and in-flight worker stop/restart with durable state and bounded recovery. The test confirms worker-global memory is lost while persisted jobs survive. Temporary profiles/build copies are removed.
+- `npm run test:browser`: preserved unpacked-extension popup/demo/priorities/storage checks.
+- Also tested `test:discovery-browser` with temporary copies of Agent 3's actual UI modules: automatic mounting, independent document display, and dismissal persistence. Those temporary files are removed and are not owned by this branch.
+- `git diff --check` passes. No live Gemini call, real third-party policy corpus, provider dataset ingestion, or actual Chrome permission prompt is certified by these simulated fixtures.
+
+## Remaining limits
+
+- Browser Fetch exposes opaque redirects; every redirect is refused as `inaccessible`. We never follow a hop whose URL/permission/private-network status cannot be checked. Add an approved public-only retrieval proxy to support validated redirects.
+- **Hostname checks do not guarantee public DNS resolution or prevent DNS rebinding.** Chrome does not expose a trustworthy DNS/IP validation API to this worker. A server-side public-only resolver/fetcher is required for complete private-network protection; do not count this as a completed P0 security boundary.
+- Complete HTML document coverage, real licensed community ingestion and a real Gemini demonstration remain integration/release gates. The local catalog is intentionally empty until authorized data and attribution are settled.
+- Large screens, shadow roots, cross-origin iframes, authenticated legal documents, PDFs, localized labels and complex JS-only policy pages are unsupported. Unsafe link URLs are excluded from jobs rather than fetched. Query-only SPA transitions share a sanitized page identity; relevant DOM changes still update documents. Dynamic script registration takes effect on the next page load after a permission grant.
+- Analysis versions/configuration must match the backend exactly. No fictional findings or reassuring fallback grade are substituted on failure.
+
+## Changed files
+
+- Discovery: `src/discovery/dom.ts`, `src/discovery/urls.ts`.
+- Processing: `src/background/retrieval.ts`, `extraction.ts`, `io.ts`, `cache.ts`, `community.ts`, `validation.ts`, `processor.ts`.
+- MV3 entries: `src/extension/content.ts`, `background.ts`, `offscreen.ts`, `offscreen.html`, and `manifest.json`.
+- Integration/build: `src/ui/overview.d.ts`, `scripts/overview-unavailable.ts`, `scripts/build.mjs`, `package.json`, `.github/workflows/check.yml`.
+- Verification/handoff: `tests/discovery-background.test.ts`, `tests/discovery-browser.mjs`, this document.
+
+The inherited contract commit adds `src/core/contracts.ts` and `docs/worker-contracts.md`; those are integration-owner work and are not independently modified here. Agent 2 separately confirmed Chromium MV3 Origin/bearer transport against its local endpoint with a simulated provider (`b4b6d0f`); integration still must connect all three workers and verify real provider behavior.

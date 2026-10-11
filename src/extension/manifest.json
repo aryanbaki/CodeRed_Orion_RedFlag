@@ -1,9 +1,28 @@
 {
   "manifest_version": 3,
-  "name": "Policy Review — Research Prototype",
+  "name": "Policy Review \u2014 Research Prototype",
   "version": "0.1.0",
   "description": "Research framework for sourced policy explanations and personal privacy reminders.",
-  "permissions": ["activeTab", "scripting", "storage"],
-  "action": { "default_popup": "popup.html" },
-  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'none'" }
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "alarms",
+    "offscreen"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src https: http:"
+  },
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "minimum_chrome_version": "120"
 }

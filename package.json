@@ -13,7 +13,8 @@
     "check": "npm run typecheck && npm test && npm run build",
     "research:probe": "node scripts/probe.mjs",
     "test:browser": "npm run build && node tests/browser.mjs",
-    "test:ui": "npm run build && node tests/ui-browser.mjs"
+    "test:ui": "npm run build && node tests/ui-browser.mjs",
+    "test:discovery-browser": "npm run build && node tests/discovery-browser.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",

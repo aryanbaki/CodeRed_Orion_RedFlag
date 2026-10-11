@@ -16,7 +16,9 @@ A Chrome extension that combines community-reviewed insights and Google Gemini t
 - My sites stores checked sites locally, shows overall grades, and ranks frequently checked sites first.
 - Primary model: Gemini 3.5 Flash, with Gemini 3.1 Flash-Lite then Gemini 2.5 Flash-Lite as backups. Backups use the same selected credential; missing evidence never triggers another model. Gemini 3.1 Flash-Lite passed a live structured-output check; 2.5 is currently unavailable for the configured key.
 - Server-only Gemini adapter with structured output, exact quotation validation, and independently evidenced policy categories. Fully evidenced protective policies can earn S.
-- Static legal containers with complete extracted text can be graded. Hidden sections, ambiguous structure, missing evidence, inaccessible documents, and absent configuration remain unrated.
+- Sites with no discovered policies or current community rating show “I couldn’t find anything on this platform” instead of empty score cards.
+- Discovery recognizes Site Terms, Privacy Notices/Statements, and combined privacy-and-cookie documents, preserving both scopes during page updates.
+- Static legal containers with complete extracted text can be graded. Explicit Adobe Core Components policy layouts with legal titles and visible rich-text blocks are also supported. Hidden sections, ambiguous structure, missing evidence, inaccessible documents, and absent configuration remain unrated.
 
 The overall Gemini grade is the worst supported grade across discovered documents, once Terms and Privacy are present and every discovered document is graded. A separate Cookie policy is optional because some sites include cookie terms in Privacy; its row shows a neutral “?” badge when no separate policy was found. During incomplete AI analysis, a current comprehensively reviewed ToS;DR service rating can supply the overall grade, with its source shown.
 

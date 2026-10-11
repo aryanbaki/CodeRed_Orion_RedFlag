@@ -19,7 +19,7 @@ test('shared summary never averages a serious grade or hides missing, partial or
  const terms=review(),privacy=review('privacy');privacy.grade='A';privacy.assessment!.grade='A';
  assert.equal(summarizeReview(state([terms,privacy])).grade,'E');assert.equal(toolbarPresentation(state([terms,privacy])).text,'E');
  for(const incomplete of [{...privacy,coverage:'partial' as const},{...privacy,status:'pending' as const},{...privacy,freshness:{cacheExpiresAt:'2000-01-01T00:00:00Z'}}]) {
-   const summary=summarizeReview(state([terms,incomplete]));assert.equal(summary.grade,'Unrated');assert.equal(summary.worstDocumentGrade,'E');assert.equal(toolbarPresentation(state([terms,incomplete])).text,'E?');
+   const summary=summarizeReview(state([terms,incomplete]));assert.equal(summary.grade,'Unrated');assert.equal(summary.worstDocumentGrade,'E');assert.equal(toolbarPresentation(state([terms,incomplete])).text,'?');
  }
  assert.deepEqual(summarizeReview(state([terms])).missingKinds,['privacy']);
  const community={...terms,assessment:undefined,community:[],grade:'A' as const};assert.equal(summarizeReview(state([community])).worstDocumentGrade,'Unrated');
@@ -37,8 +37,8 @@ test('re-check discards prior assessment, bypasses cache and validates new exact
 test('source authentication and backend authentication are distinct and successful retry clears failures',async()=>{
  let latest=review();
  await processDocument(review(),'service.com',deps({analyze:async()=>{throw new AnalysisFailure('authentication-required');}}),async r=>{latest=r;});
- assert.equal(latest.failure?.stage,'analysis');assert.match(latest.failure!.message,/server authorization/);
+ assert.equal(latest.failure?.stage,'analysis');assert.match(latest.failure!.message,/server or provider authorization/);
  assert.match(failureMessage('retrieval','authentication-required'),/public document requires authentication/);
  await processDocument(latest,'service.com',deps(),async r=>{latest=r;});assert.equal(latest.grade,'E');assert.equal(latest.failure,undefined);
- await processDocument(latest,'service.com',deps({analyze:async()=>{throw new AnalysisFailure('quota',Infinity);}}),async r=>{latest=r;});assert.equal(latest.failure?.retryAfterSeconds,undefined);
+ await processDocument(latest,'service.com',deps({analyze:async()=>{throw new AnalysisFailure('quota',Infinity);}}),async r=>{latest=r;});assert.equal((latest as DocumentReview).failure?.retryAfterSeconds,undefined);
 });

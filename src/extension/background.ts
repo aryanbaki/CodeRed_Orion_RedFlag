@@ -18,7 +18,7 @@ const SESSION_KEY = 'redflag.jobs.v1';
 const BACKEND_KEY = 'redflag.backend.v1';
 interface Job {tabId:number;pageKey:string;documentId:string;attempts:number;bypassCache?:boolean}
 interface Session {browserDocumentId?:string;state:ReviewState;historyOrigin?:string}
-interface Snapshot {sessions:Record<string,Session>;jobs:Job[]}
+interface Snapshot {sessions:Record<string,Session>;jobs:Job[];cooldowns?:Record<string,number>}
 interface Backend extends AnalysisVersions {baseUrl:string;accessToken:string}
 let snapshot:Snapshot = {sessions:{},jobs:[]};
 let running = 0;
@@ -64,6 +64,7 @@ async function extract(download:Download):Promise<Extraction> {
 }
 async function permitted(url:string) {return chrome.permissions.contains({origins:[new URL(url).origin + '/*']});}
 const controllers = new Set<AbortController>();
+function setCooldown(origin:string,seconds:number) {snapshot.cooldowns ??={};snapshot.cooldowns[origin]=Date.now()+seconds*1000;void persist();}
 const downloads = new Map<string,Promise<Download>>();
 async function download(url:string):Promise<Download> {
   let request = downloads.get(url);
@@ -73,6 +74,8 @@ async function download(url:string):Promise<Download> {
 async function analyze(document:AnalysisDocument,isCurrent:()=>boolean=()=>true) {
   const config = await backend();
   if (!config) throw new AnalysisFailure('inaccessible');
+  const wait=(snapshot.cooldowns?.[config.baseUrl]??0)-Date.now();
+  if(wait>0) throw new AnalysisFailure('quota',Math.ceil(wait/1000));
   if (!await permitted(config.baseUrl)) throw new AnalysisFailure('permission-required');
   if (!permitsAi(await preferences())) throw new Error('ai-consent-required');
   if(!isCurrent()) throw new Error('inaccessible');
@@ -85,7 +88,9 @@ async function analyze(document:AnalysisDocument,isCurrent:()=>boolean=()=>true)
       body:JSON.stringify({schemaVersion:CONTRACT_VERSION,document})
     }),controller.signal);
     if (!response.ok) {
-      const delay=Number(response.headers.get('retry-after'));
+      const header=response.headers.get('retry-after');
+      const delay=header && /^\d+$/.test(header) ? Math.min(86400,Number(header)) : 60;
+      if(response.status===429) setCooldown(config.baseUrl,delay);
       throw new AnalysisFailure(response.status === 429 ? 'quota' : response.status === 408 || response.status === 504 ? 'timeout' : response.status === 401 || response.status === 403 ? 'authentication-required' : 'inaccessible',response.status===429 && Number.isFinite(delay) ? delay : undefined);
     }
     const body = await boundedText(response,120000,controller.signal);
@@ -94,6 +99,7 @@ async function analyze(document:AnalysisDocument,isCurrent:()=>boolean=()=>true)
     let data;
     try {data = JSON.parse(body);} catch {throw new Error('invalid-response');}
     if (data.schemaVersion !== CONTRACT_VERSION || !data.assessment) throw new Error('invalid-response');
+    if(data.assessment.reason==='quota') setCooldown(config.baseUrl,60);
     if (!permitsAi(await preferences())) throw new Error('ai-consent-required');
     return data.assessment;
   } catch (error) {
@@ -111,7 +117,7 @@ async function publish(tabId:number,pageKey:string) {
     const saved=await getHistory(session.historyOrigin).catch(()=>undefined);
     if (!saved || saved.generation !== pageKey) return;
   }
-  if (published.documents.length) await recordReview(published).catch(()=>{});
+  if (published.documents.length) await recordReview(published,{requireExisting:!!session.historyOrigin}).catch(()=>{});
   if (snapshot.sessions[tabId]?.state.pageKey !== pageKey) return;
   if (tabId>=0) await toolbar.update(tabId,published);
   const options:chrome.tabs.MessageSendOptions = session.browserDocumentId ? {documentId:session.browserDocumentId} : {frameId:0};
@@ -139,7 +145,9 @@ async function pump() {
     job.attempts++;running++;inFlight.add(key);
     await persist(); // Persist retry budget before any network work.
     void processDocument(review,new URL(session.state.pageUrl).hostname,{
-      preferences:async () => { const prefs = await preferences(); return snapshot.sessions[job.tabId]?.state.pageKey === job.pageKey && snapshot.sessions[job.tabId]?.state.documents.some(d => d.document.id === job.documentId) ? prefs : {...prefs,enabled:false}; },download,extract,
+      preferences:async () => { const prefs = await preferences(); const savedSession=snapshot.sessions[job.tabId];
+        if(savedSession?.historyOrigin && !(await getHistory(savedSession.historyOrigin).catch(()=>undefined))) return {...prefs,enabled:false};
+        return snapshot.sessions[job.tabId]?.state.pageKey === job.pageKey && snapshot.sessions[job.tabId]?.state.documents.some(d => d.document.id === job.documentId) ? prefs : {...prefs,enabled:false}; },download,extract,
       versions:backend,analyze:doc=>analyze(doc,()=>snapshot.sessions[job.tabId]?.state.pageKey===job.pageKey && snapshot.sessions[job.tabId]?.state.documents.some(d=>d.document.id===job.documentId)===true),bypassCache:job.bypassCache,
       catalog:async () => parseCommunityCatalog((await chrome.storage.local.get(COMMUNITY_CATALOG_KEY))[COMMUNITY_CATALOG_KEY]),
       cacheGet:async key => ((await chrome.storage.local.get(CACHE_KEY))[CACHE_KEY] as Record<string,CacheEntry> | undefined)?.[key],

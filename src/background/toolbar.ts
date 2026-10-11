@@ -4,7 +4,7 @@ const colors={A:'#2d6844',B:'#467443',C:'#a67721',D:'#ba681c',E:'#b83b36',F:'#9e
 export function toolbarPresentation(state?:ReviewState | null) {
   const s=summarizeReview(state);
   const grade=s.worstDocumentGrade;
-  const text=s.status === 'rated' ? s.grade : grade !== 'Unrated' ? `${grade}?` : s.highConcern ? '!' : s.pending ? '…' : '?';
+  const text=s.status === 'rated' ? s.grade : grade !== 'Unrated' ? '?' : s.highConcern ? '!' : s.pending ? '…' : '?';
   const scope=s.status === 'rated' ? 'All discovered policies graded (discovery may be incomplete)' : 'Incomplete review';
   return {text,color:grade !== 'Unrated' ? colors[grade] : s.pending ? colors.pending : colors.unknown,
     title:`RedFlag — ${scope}. ${s.graded}/${s.total} discovered policies graded; ${s.pending} pending. Worst supported document grade: ${grade}. Terms: ${s.termsGrade}; Privacy: ${s.privacyGrade}.${s.missingKinds.length ? ' Not discovered: '+s.missingKinds.join(',')+'.' : ''}${s.highConcern ? ' High-severity sourced concern.' : ''}`};

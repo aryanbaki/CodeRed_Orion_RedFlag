@@ -18,7 +18,7 @@ try {
        try {
          if(hold) return await new Promise(()=>{});
          await new Promise(r=>timer(r,20));const doc=JSON.parse(init.body).document;
-         if(doc.url.endsWith('/quota')) return new Response('{}',{status:429,headers:{'Retry-After':'60'}});
+         if(doc.url.endsWith('/quota')) return new Response('{}',{status:429,headers:{'Retry-After':'1'}});
          if(doc.url.endsWith('/backend-auth')) return new Response('{}',{status:401});
          return new Response(JSON.stringify({schemaVersion:1,assessment:{documentId:doc.id,documentUrl:doc.url,kind:doc.kind,grade:doc.kind==='privacy'?'B':'E',coverage:doc.coverage,contentHash:doc.contentHash,provider:'gemini',model:'test-model',promptVersion:'p1',rubricVersion:'r1',analyzedAt:new Date().toISOString(),summary:'Synthetic supported finding',findings:[{id:'f1',category:'retention',severity:'high',title:'Retention concern',explanation:'Records retained indefinitely.',quote:'We retain your information indefinitely.',sourceUrl:doc.url}]}}),{headers:{'content-type':'application/json'}});
        } finally {active--;}
@@ -58,9 +58,10 @@ try {
  await expect.poll(async()=> (await get())?.documents.length).toBe(6);await expect.poll(async()=> (await get()).documents.every(d=>d.status!=='pending')).toBe(true);
  const mixed=await get();assert.equal(mixed.documents.find(d=>d.document.url.endsWith('/terms')).grade,'E');
  assert.equal(mixed.documents.find(d=>d.document.url.endsWith('/auth')).failure.stage,'retrieval');assert.equal(mixed.documents.find(d=>d.document.url.endsWith('/backend-auth')).failure.stage,'analysis');
- assert.equal(mixed.documents.find(d=>d.document.url.endsWith('/quota')).failure.retryAfterSeconds,60);assert.equal(mixed.documents.find(d=>d.document.url.includes('unpermitted')).reason,'permission-required');
- await expect.poll(()=>worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),tabId)).toBe('E?');
+ assert.equal(mixed.documents.find(d=>d.document.url.endsWith('/quota')).failure.retryAfterSeconds,1);assert.equal(mixed.documents.find(d=>d.document.url.includes('unpermitted')).reason,'permission-required');
+ await expect.poll(()=>worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),tabId)).toBe('?');
  assert.deepEqual(await page.evaluate(()=>events),[]);assert.equal(await page.locator('#agree').isChecked(),false);
+ await page.waitForTimeout(1100);
  const staleKey=mixed.pageKey;await worker.evaluate(()=>{globalThis.hold=true;});
  const terms=mixed.documents.find(d=>d.document.kind==='terms');
  const sent=await reopened.evaluate(async ({tabId,pageKey,documentId})=>chrome.runtime.sendMessage({type:'redflag/analyze',mode:'one',tabId,pageKey,documentId}),{tabId,pageKey:staleKey,documentId:terms.document.id});assert.equal(sent.ok,true);
@@ -75,6 +76,11 @@ try {
  const otherId=await reopened.evaluate(async()=> (await chrome.tabs.query({url:'https://service.com/empty'}))[0].id);
  await expect.poll(()=>worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),otherId)).toBe('?');
  await page.bringToFront();await expect.poll(()=>worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),tabId)).toBe('E');
+ const savedOrigin='https://service.com';
+ const detached=await reopened.evaluate(async siteOrigin=>chrome.runtime.sendMessage({type:'redflag/recheck-site',siteOrigin}),savedOrigin);assert.equal(detached.ok,true);
+ await expect.poll(async()=>reopened.evaluate(async()=>{const sites=(await chrome.storage.local.get('redflag.history.v1'))['redflag.history.v1'].sites;return sites.find(s=>s.origin==='https://service.com')?.documents.every(d=>d.status!=='pending');})).toBe(true);
+ const missingSaved=await reopened.evaluate(async()=>chrome.runtime.sendMessage({type:'redflag/recheck-site',siteOrigin:'https://deleted.com'}));assert.equal(missingSaved.code,'history-unavailable');
+ const untrusted=await page.evaluate(async()=>chrome.runtime?.sendMessage?.({type:'redflag/analyze',mode:'all',pageKey:'wrong'})).catch(()=>undefined);
  const requests=await worker.evaluate(()=>globalThis.requests);assert.ok(requests.every(r=>r.credentials==='omit'));assert.ok(requests.every(r=>!r.body?.includes('email')));
  console.log('Actions browser checks passed: actual worker one/all/recheck, cache, duplicate joining, bounded concurrency/timeout, independent mixed failures, AI disabled, permissions, popup close/reopen, stale generation and per-tab badges; public responses and Gemini mocked.');
 }finally{await context?.close();await rm(root,{recursive:true,force:true});}

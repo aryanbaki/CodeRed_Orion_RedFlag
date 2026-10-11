@@ -4,6 +4,7 @@ import {lookupCommunity, type CommunityRecord} from './community.ts';
 import type {Download} from './retrieval.ts';
 import {RetrievalError} from './retrieval.ts';
 import type {Extraction} from './extraction.ts';
+import {AnalysisFailure,reviewFailure} from './failures.ts';
 import {permitsAi, validateAssessment} from './validation.ts';
 export interface ProcessorDependencies {
   preferences: () => Promise<RedFlagPreferences>;
@@ -13,17 +14,20 @@ export interface ProcessorDependencies {
   analyze: (document:AnalysisDocument) => Promise<unknown>;
   catalog: () => Promise<CommunityRecord[]>;
   cacheGet: (key:string) => Promise<CacheEntry | undefined>;
+  bypassCache?:boolean;
   cachePut: (key:string,entry:CacheEntry) => Promise<void>;
 }
 export function failureReason(error: unknown): UnratedReason {
   if (error instanceof Error && error.message === 'oversized') return 'too-large';
   if (error instanceof RetrievalError) return ({'permission-denied':'permission-required','redirect-unverified':'inaccessible','unsupported-content':'unsupported','oversized':'too-large'} as Record<string,UnratedReason>)[error.reason] ?? error.reason as UnratedReason;
-  const allowed: UnratedReason[] = ['quota','timeout','invalid-response','unsafe-url','network-error','authentication-required','incomplete','too-large','inaccessible','unsupported','ai-consent-required'];
+  const allowed: UnratedReason[] = ['quota','timeout','invalid-response','unsafe-url','network-error','authentication-required','incomplete','too-large','inaccessible','unsupported','ai-consent-required','permission-required','insufficient-evidence'];
   return error instanceof Error && allowed.includes(error.message as UnratedReason) ? error.message as UnratedReason : 'network-error';
 }
 /** Each job processes exactly one independently scoped agreement. */
 export async function processDocument(review:DocumentReview, pageHost:string, deps:ProcessorDependencies, publish:(review:DocumentReview)=>Promise<void>): Promise<void> {
   const next:DocumentReview = structuredClone(review);
+  delete next.assessment; delete next.failure; next.cached=false;next.freshness={};
+  let stage: 'retrieval' | 'analysis' = 'retrieval';
   try {
     next.community = lookupCommunity(pageHost,next.document.url,await deps.catalog());
     await publish(next); // Community references can be shown while retrieval is pending.
@@ -33,10 +37,11 @@ export async function processDocument(review:DocumentReview, pageHost:string, de
     next.coverage = extraction.coverage;
     if (extraction.reason || !extraction.text) throw new Error(extraction.reason ?? 'incomplete');
     const doc:AnalysisDocument = {id:next.document.id,url:download.url,kind:next.document.kind,text:extraction.text,coverage:extraction.coverage,retrievedAt:download.retrievedAt,contentHash:await contentHash(extraction.text)};
+    stage='analysis';
     const versions = await deps.versions();
     if (versions) {
       const key = cacheIdentity(doc,versions);
-      const entry = await deps.cacheGet(key);
+      const entry = deps.bypassCache ? undefined : await deps.cacheGet(key);
       const cached = applicableCache(entry,doc,versions);
       if (cached) {
         // Cache is never trusted without validating its quotes against today's download.
@@ -61,7 +66,8 @@ export async function processDocument(review:DocumentReview, pageHost:string, de
     next.grade = next.assessment.grade;
     next.status = next.grade === 'Unrated' ? 'unrated' : 'ready';
     next.reason = next.assessment.reason;
+    if (next.reason) next.failure=reviewFailure(stage,next.reason);
     next.freshness.analyzedAt = next.assessment.analyzedAt;
-  } catch (error) { next.status = 'unrated'; next.grade = 'Unrated'; next.reason = failureReason(error); }
+  } catch (error) { next.status = 'unrated'; next.grade = 'Unrated'; next.reason = failureReason(error); next.failure=reviewFailure(stage,next.reason,error instanceof AnalysisFailure ? error.retryAfterSeconds : undefined); }
   await publish(next);
 }

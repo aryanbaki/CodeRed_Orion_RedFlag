@@ -85,3 +85,7 @@ Work starts from `origin/main` `f83562e` in a separate `codex/gemini-analysis` w
 - Git exclusions, extension bundle inspection and missing-configuration startup were checked locally. `npm run test:browser` passed for the existing popup/demo/priorities/storage/restricted-page behavior; this is not the P0 background flow.
 
 Not verified: live Gemini model availability, structured output acceptance for the selected model, interpretation accuracy, missed clauses/recall, injection resistance of a live model, cost, latency or the complete zero-click worker/UI flow. Exact quote validation proves text presence, not meaning. No policy dates are inferred; original source/retrieval dates remain in worker freshness state.
+
+### Follow-up transport verification
+
+`npm run test:backend-browser` passed: a real unpacked Chromium MV3 service worker sent the exact `chrome-extension://<id>` Origin to the real local `POST /api/analyze` server, received the canonical hash/identity/grade and four exact findings with bearer authorization, and received 401 without the token. The test uses fictional Terms and injected provider output; no Google API call occurs. Temporary extension/profile files are removed. This resolves the extension-Origin transport concern, not the full background-worker consent/discovery/retrieval flow. Strict TypeScript checks also include this fixture.

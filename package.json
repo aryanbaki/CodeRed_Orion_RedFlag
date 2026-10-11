@@ -16,7 +16,9 @@
     "test:ui": "npm run build && node tests/ui-browser.mjs",
     "test:discovery-browser": "npm run build && node tests/discovery-browser.mjs",
 
-    "start:server": "node --experimental-strip-types --env-file=.env src/server/main.ts"
+    
+    "start:server": "node --experimental-strip-types --env-file=.env src/server/main.ts",
+    "test:backend-browser": "node --experimental-strip-types tests/backend-browser.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",

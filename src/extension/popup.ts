@@ -97,8 +97,11 @@ async function analyzePolicy(documentId:string){
  catch{get('action-status').textContent='Could not start analysis. Try again.';}finally{busyIds.delete(documentId);paint();}
 }
 async function analyzeAll(){
- if(busy||!canAnalyze())return;
+ if(busy)return;
+ // Discover public policies before requiring AI consent or a connected Gemini backend.
+ // Sites with no policies should report that directly instead of opening setup.
  analysisStarted=true;paint();await scan();if(!state?.documents.length){get('action-status').textContent=state?.discoveryPending?'Still looking for policies…':'No public policies found.';return;}
+ if(!canAnalyze())return;
  const pageKey=state.pageKey;
  try{const result=await requestAnalysis({type:'redflag/analyze',mode:'recheck',pageKey});if(result.ok&&state?.pageKey===pageKey){acceptState(result.state);paint();}else if(!result.ok)get('action-status').textContent=result.error;}
  catch{get('action-status').textContent='Could not start analysis. Try again.';}

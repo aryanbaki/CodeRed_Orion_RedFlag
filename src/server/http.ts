@@ -10,7 +10,7 @@ import {validateRequest, InputError} from './validation.ts';
 import type {ServerConfig} from './config.ts';
 const MAX_BODY_BYTES = 2_000_000;
 type Analyzer = (request: AnalyzeRequest) => Promise<DocumentAssessment>;
-export function createAnalysisServer(config: ServerConfig, analyzer: Analyzer = r => analyzeDocument(r.document,config), chatter:(r:ChatRequest)=>Promise<ChatAnswer>=r=>answerPolicyQuestion(r,config)) {
+export function createAnalysisServer(config: ServerConfig, analyzer: Analyzer = r => analyzeDocument(r.document,config), chatter:(r:ChatRequest)=>Promise<ChatAnswer>=r=>answerPolicyQuestion(r,config), options:{allowLocalConnect?:boolean}={}) {
   let active = 0, minuteStart = Date.now(), minuteCount = 0, dayStart = Date.now(), dayCount = 0;
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const send = (status:number, value:unknown) => {
@@ -19,9 +19,21 @@ export function createAnalysisServer(config: ServerConfig, analyzer: Analyzer = 
     const origin = req.headers.origin;
     if (origin !== config.allowedOrigin) {send(403,failure('unsafe-url','Origin denied.',false)); return;}
     res.setHeader('Access-Control-Allow-Origin', config.allowedOrigin); res.setHeader('Vary','Origin');
-    if (!['/api/analyze','/api/chat','/api/health'].includes(req.url??'')) {send(404,failure('unsupported','Endpoint not found.',false)); return;}
+    if (!['/api/analyze','/api/chat','/api/health','/api/connect'].includes(req.url??'')) {send(404,failure('unsupported','Endpoint not found.',false)); return;}
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {'Access-Control-Allow-Methods':'POST, GET','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Max-Age':'600'}); res.end(); return;
+    }
+    if(req.url==='/api/connect'){
+      const address=req.socket.remoteAddress;
+      if(!options.allowLocalConnect||!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(address??'')){send(403,failure('unsupported','Local connection unavailable.',false));return;}
+      if(req.method!=='POST'){send(405,failure('unsupported','POST required.',false));return;}
+      if(req.headers['content-type']?.split(';')[0].trim()!=='application/json'||req.headers['content-encoding']){send(415,failure('unsupported','JSON required.',false));return;}
+      if(Number(req.headers['content-length']??0)>256){send(413,failure('too-large','Input too large.',false));req.resume();return;}
+      let bytes=0,body='';const timer=setTimeout(()=>{send(408,failure('timeout','Connection timed out.',true));req.destroy();},5000);
+      try{for await(const chunk of req){bytes+=Buffer.byteLength(chunk);if(bytes>256){send(413,failure('too-large','Input too large.',false));req.destroy();return;}body+=chunk;}
+        if(body.trim()!=='{}'){send(400,failure('invalid-response','Empty JSON object required.',false));return;}
+        send(200,{baseUrl:'http://127.0.0.1:'+config.port,accessToken:config.token,model:config.model,fallbackModels:config.fallbackModels??[],promptVersion:PROMPT_VERSION,rubricVersion:RUBRIC_VERSION});
+      }catch{send(400,failure('invalid-response','Connection unavailable.',false));}finally{clearTimeout(timer);}return;
     }
     const supplied = Buffer.from(req.headers.authorization ?? ''); const expected = Buffer.from(`Bearer ${config.token}`);
     if (supplied.length !== expected.length || !timingSafeEqual(supplied,expected)) {send(401,failure('authentication-required','Demo access authorization required.',false)); return;}

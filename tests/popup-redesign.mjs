@@ -29,13 +29,13 @@ try{
  await page.goto(`chrome-extension://${id}/popup.html`);await expect(page.locator('#domain')).toHaveText(domain);
  await page.locator('#domain').evaluate(node=>node.textContent='example.com');
  await expect(page.locator('#onboarding')).toBeVisible();await page.screenshot({path:'dist/site-review-v2/01-connect.png',fullPage:true});
- await page.locator('#start').click();await expect(page.locator('#onboarding')).toBeVisible();await expect(page.locator('#connection-status')).toHaveText('Import your backend connection file first.');
+ await page.locator('#start').click();await expect(page.locator('#onboarding')).toBeVisible();await expect(page.locator('#connection-status')).toHaveText('Start the RedFlag backend, then retry.');
  await page.locator('#connection-file').setInputFiles({name:'connection.json',mimeType:'application/json',buffer:Buffer.from('{}')});
  await expect(page.locator('#connection-status')).toContainText('Backend connected');await page.locator('#start').click();await expect(page.locator('#onboarding')).toBeHidden();
  const state=(documents,extra={})=>({schemaVersion:1,pageKey:'fixture',pageUrl:`https://${domain}/signup`,context:'signup',documents,updatedAt:now,...extra});
  await page.evaluate(s=>window.setFixture(s),state([],{discoveryPending:true}));await expect(page.locator('.policy-row')).toHaveCount(3);for(const row of await page.locator('.policy-row').all())await expect(row).toBeVisible();await expect(page.locator('#loading')).toBeVisible();await expect(page.locator('[data-grade=Unrated]')).toHaveCount(4);for(const badge of await page.locator('[data-grade=Unrated]').all()){await expect(badge).toHaveText('?');await expect(badge).toHaveAttribute('aria-label','Unknown grade');}await expect(page.locator('.policy-row svg')).toHaveCount(0);await page.screenshot({path:'dist/site-review-v2/02-searching.png',fullPage:true});
  await page.evaluate(s=>window.setFixture(s),state([review('terms','C','ready','complete'),review('privacy','A','ready','complete'),review('cookies','B','ready','complete')]));
- await expect(page.locator('.grade-summary .grade-tile')).toHaveText('C');await expect(page.locator('.grade-summary')).toContainText('Gemini policy review');
+ await expect(page.locator('.grade-summary .grade-tile')).toHaveText('C');await expect(page.locator('.grade-summary')).toContainText('Saved you ~156 minutes');
  await expect(page.locator('.policy-row').first()).toContainText('Privacy policy');await expect(page.locator('.policy-row').nth(1)).toContainText('Cookie policy');await expect(page.locator('.policy-row').nth(2)).toContainText('Terms of service');
  await expect(page.locator('.policy-meta').first()).toHaveText('12,345 words');await expect(page.locator('.policy-row details')).toHaveCount(0);await expect(page.locator('.policy-row')).not.toContainText(['Source','Open policy','Source']);await expect(page.locator('#flags-content')).toContainText('Automatic renewal');
  await page.locator('.overall-copy h2').evaluate(n=>n.textContent='Example');await page.screenshot({path:'dist/site-review-v2/03-red-flags.png',fullPage:true});
@@ -56,7 +56,7 @@ try{
  await page.evaluate(s=>window.setFixture(s),state([unavailable]));await page.locator('#tab-summary').click();await expect(page.locator('#summary-content')).not.toContainText('Background AI is disabled');await expect(page.locator('#summary-content')).not.toContainText('Cookie policy not found');await expect(page.locator('#summary-content .gap')).toHaveCount(0);await expect(page.locator('.policy-row details')).toHaveCount(0);
  await page.evaluate(()=>{document.querySelector('.overall-copy h2').textContent='Figma';document.querySelector('#domain').textContent='www.figma.com';});await page.screenshot({path:'dist/site-review-v2/06-unknown.png',fullPage:true});
 await page.locator('.analyze-policy').first().click();await expect(page.locator('#onboarding')).toBeVisible();
- await page.evaluate(()=>document.fonts.ready);if(!await page.evaluate(()=>[...document.fonts].some(face=>face.family==='Avion'&&face.status==='loaded')))throw Error('Avion font did not load');
+ await page.evaluate(()=>document.fonts.ready);if(!await page.evaluate(()=>[...document.fonts].some(face=>face.family==='Merriweather'&&face.status==='loaded')))throw Error('Merriweather font did not load');
  const metrics=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>400,logo:document.querySelector('.brand-logo').naturalWidth}));if(metrics.overflow||metrics.logo!==128)throw Error(JSON.stringify(metrics));if(errors.length)throw Error(errors.join('; '));
  console.log('Popup verified: checked setup, always-visible policy cards, Analyze all/individual, evidence, Summary, Chat, citation expansion, quota retry, navigation reset, keyboard tabs, no horizontal overflow. Screenshot data are fixtures.');
 }finally{await context?.close();await rm(profile,{recursive:true,force:true});}

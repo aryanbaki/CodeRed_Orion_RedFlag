@@ -1,12 +1,13 @@
-import {avionBase64} from './font-data.ts';
-export const APP_FONT_STACK = '"Avion", Arial, sans-serif';
+import {merriweatherFaces} from './font-data.ts';
+export const APP_FONT_STACK = '"Merriweather", Georgia, serif';
 const loads=new WeakMap<Document,Promise<void>>();
-/** Register once per document, including the document that owns an injected shadow root. */
+/** Register local regular, bold, black and italic faces once per document. */
 export function ensureAppFont(doc:Document=document):Promise<void> {
  const existing=loads.get(doc);if(existing)return existing;
- const bytes=Uint8Array.from(atob(avionBase64),character=>character.charCodeAt(0));
- const face=new FontFace('Avion',bytes,{style:'normal',weight:'400',display:'swap'});
- doc.fonts.add(face);
- const loaded=face.load().then(()=>{});
+ const loaded=Promise.all(merriweatherFaces.map(({base64,weight,style})=>{
+  const bytes=Uint8Array.from(atob(base64),character=>character.charCodeAt(0));
+  const face=new FontFace('Merriweather',bytes,{style,weight,display:'swap'});
+  doc.fonts.add(face);return face.load();
+ })).then(()=>{});
  loads.set(doc,loaded);return loaded;
 }

@@ -9,7 +9,7 @@ try{
  context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(`chrome-extension://${id}/popup.html`);
  await expect(page.getByRole('heading',{name:'RedFlag',exact:true})).toBeVisible();await expect(page.locator('#onboarding')).toBeVisible();await expect(page.locator('#domain')).toHaveText('Open a website');await expect(page.locator('#chat-send')).toBeDisabled();
- await page.locator('#start').click();await expect(page.locator('#connection-status')).toHaveText('Import your backend connection file first.');
+ await page.locator('#start').click();await expect(page.locator('#connection-status')).toHaveText('Start the RedFlag backend, then retry.');
  await page.locator('#community-only').click();await expect(page.locator('#onboarding')).toBeHidden();await expect(page.locator('#ai-state')).toHaveText('Community ratings only');
  const consent=await page.evaluate(async()=> (await chrome.storage.local.get('redflag.preferences.v1'))['redflag.preferences.v1'].aiConsent);if(consent.enabled||consent.grantedAt)throw Error('Community setup granted AI consent');
  await page.locator('#settings-link').click();await page.locator('#review-enabled').uncheck();await page.reload();await expect(page.locator('#review-enabled')).not.toBeChecked();await page.locator('#settings-link').click();await page.locator('#review-enabled').check();await expect(page.locator('#settings input[type=checkbox]')).toHaveCount(1);

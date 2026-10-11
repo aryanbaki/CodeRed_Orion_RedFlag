@@ -33,9 +33,11 @@ function paintInsights(){
  const insights=siteInsights(state),flags=get('flags-content'),summary=get('summary-content');flags.replaceChildren();summary.replaceChildren();
  for(const f of insights.findings)flags.append(citedCard(f));
  if(!insights.findings.length)flags.append(element('p',insights.pending?'Reading policies…':insights.summaries.length?'No supported red flags in the text reviewed. Missing evidence can still prevent a grade.':'Analyze policies to see supported red flags.','empty-state'));
- for(const s of insights.summaries){const card=element('article',undefined,'summary-card');card.append(element('h3',s.label),element('p',s.text));if(s.model)card.append(element('p',s.model,'meta'));summary.append(card);}
+ if(insights.summaries.length)summary.append(element('h3','At a glance'));
+ for(const s of insights.summaries){const card=element('article',undefined,'summary-card');card.append(element('h3',s.label),element('p',s.text));summary.append(card);}
  if(!insights.summaries.length)summary.append(element('p',insights.pending?'Reading policies…':'Analyze policies to see a summary.','empty-state'));
- if(insights.protections.length){summary.append(element('h3','In your favor'));for(const p of insights.protections)summary.append(citedCard(p,true));}
+ if(insights.findings.length){summary.append(element('h3','Watch out for'));for(const f of insights.findings.slice(0,3))summary.append(citedCard(f));}
+ if(insights.protections.length){summary.append(element('h3','In your favor'));for(const p of insights.protections.slice(0,3))summary.append(citedCard(p,true));}
 }
 function paint(){
  if(!preferences)return;
@@ -49,7 +51,7 @@ function paint(){
  paintInsights();
 }
 function showSetup(message?:string){get('onboarding').hidden=false;if(message)get('connection-status').textContent=message;get('onboarding').scrollIntoView({block:'start'});}
-function canAnalyze(){if(!preferences.aiConsent.enabled||!connected){showSetup(!connected?'Import your backend connection file to use Gemini.':'Enable Gemini checks to continue.');return false;}return true;}
+function canAnalyze(){if(!preferences.aiConsent.enabled||!connected){showSetup(!connected?'Start the RedFlag backend, then retry.':'Enable checks to continue.');return false;}return true;}
 async function scan(){
  if(!pageUrl||busy||!preferences.enabled)return;
  busy=true;get('action-status').textContent='';paint();
@@ -100,15 +102,16 @@ get('connect').addEventListener('click',()=>get<HTMLInputElement>('connection-fi
 get('connection-file').addEventListener('change',()=>void (async()=>{
  const input=get<HTMLInputElement>('connection-file'),file=input.files?.[0],button=get<HTMLButtonElement>('connect');if(!file)return;
  button.disabled=true;get('connection-status').textContent='Checking connection…';
- try{if(file.size>8000)throw Error('Choose a RedFlag connection JSON file.');const config=JSON.parse(await file.text());const result=await chrome.runtime.sendMessage({type:'redflag/connect-backend',config});connected=result?.connected===true;get('connection-status').textContent=connected?'Backend connected. Enable Gemini checks to continue.':result?.error??'Connection unavailable.';}
+ try{if(file.size>8000)throw Error('Choose a RedFlag connection JSON file.');const config=JSON.parse(await file.text());const result=await chrome.runtime.sendMessage({type:'redflag/connect-backend',config});connected=result?.connected===true;get('connection-status').textContent=connected?'Backend connected. Enable checks to continue.':result?.error??'Connection unavailable.';}
  catch{get('connection-status').textContent='Choose a valid RedFlag connection file.';}finally{button.disabled=false;input.value='';paint();}
 })());
 async function finishSetup(ai:boolean){
- if(ai&&!connected){showSetup('Import your backend connection file first.');return;}
+ if(ai&&!connected){showSetup('Start the RedFlag backend, then retry.');return;}
  const start=get<HTMLButtonElement>('start'),community=get<HTMLButtonElement>('community-only');start.disabled=true;community.disabled=true;
  try{await navigator.locks.request('redflag-preferences-v1',async()=>{const latest=await loadPreferences();const next={...changeConsent(latest,ai,new Date().toISOString()),enabled:true};await savePreferences(next);preferences=next;});await chrome.storage.local.set({[onboardingKey]:true});get('onboarding').hidden=true;await scan();if(ai)await analyzeAll();}
  catch{get('action-status').textContent='Setup could not be saved. Try again.';}finally{start.disabled=false;community.disabled=false;paint();}
 }
+get('retry-connection').addEventListener('click',()=>void (async()=>{get('connection-status').textContent='Connecting…';const result=await chrome.runtime.sendMessage({type:'redflag/backend-status'});connected=result?.connected===true;get('connection-status').textContent=connected?'Connected.':result?.error??'Connection unavailable.';paint();})());
 get('start').addEventListener('click',()=>void finishSetup(true));get('community-only').addEventListener('click',()=>void finishSetup(false));
 get('review-enabled').addEventListener('change',()=>void (async()=>{preferences={...preferences,enabled:get<HTMLInputElement>('review-enabled').checked};await savePreferences(preferences);paint();if(preferences.enabled)await scan();})());
 chrome.runtime.onMessage.addListener(message=>{if(message?.type==='redflag/state'&&message.state?.schemaVersion===1&&message.state.pageUrl===pageUrl){acceptState(message.state);paint();}});
@@ -119,7 +122,7 @@ void (async()=>{
  if(tab?.url&&/^https?:\/\//.test(tab.url)){const url=new URL(tab.url);url.search='';url.hash='';url.username='';url.password='';pageUrl=url.href;get('domain').textContent=url.hostname;siteName=url.hostname.replace(/^www\./,'');}
  else {get('domain').textContent='Open a website';get('status').textContent='Open a website to review its policies.';}
  paint();await refreshSites();
- const connection=await chrome.runtime.sendMessage({type:'redflag/backend-status'});connected=connection?.connected===true;get('connection-status').textContent=connected?'Backend connected.':connection?.error??'Import your backend connection file.';
+ const connection=await chrome.runtime.sendMessage({type:'redflag/backend-status'});connected=connection?.connected===true;get('connection-status').textContent=connected?'Backend connected.':connection?.error??'Start the RedFlag backend, then retry.';
  if(preferences.aiConsent.enabled&&!connected)showSetup();
  const response=await chrome.runtime.sendMessage({type:'redflag/get-state'});if(response?.ok)acceptState(response.state);await scan();paint();
 })().catch(()=>{get('status').textContent='RedFlag is unavailable. Try reopening it.';get('loading').hidden=true;});

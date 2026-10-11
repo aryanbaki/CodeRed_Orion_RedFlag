@@ -78,3 +78,16 @@ test('an unsupported favorable quotation is discarded while independent exact ad
  assert.equal(a.grade,'Unrated');assert.equal(a.reason,'insufficient-evidence');assert.equal(a.findings[0].quote,riskQuote);assert.deepEqual(a.protections,[]);assert.ok(!a.summary.includes('Invented'));validateAssessment(a,d,backend);
  assert.throws(()=>gradeOutput({findings:[finding],assessments:[{category:'sharing',status:'protective',quote:'An invented favorable sharing protection.',explanation:'Invented favorable sharing explanation.'},{category:'retention',status:'not-found',quote:null,explanation:'Retention limits are not stated in the text.'},{category:'tracking',status:'not-found',quote:null,explanation:'Tracking restrictions are not stated in the text.'}]},d,config.model),/Contradictory/);
 });
+
+test('automatic local pairing is disabled by default and restricted to the exact extension origin',async()=>{
+ for(const enabled of [false,true]){
+  const server=createAnalysisServer(config,undefined,undefined,{allowLocalConnect:enabled});server.listen(0,'127.0.0.1');await once(server,'listening');const base=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try{
+   for(const origin of ['https://example.com','chrome-extension://'+'b'.repeat(32),config.allowedOrigin]){
+    const r=await fetch(base+'/api/connect',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:'{}'});
+    assert.equal(r.status,enabled&&origin===config.allowedOrigin?200:403);
+    const result=await r.json();if(r.ok){assert.equal(result.accessToken,config.token);assert.equal(result.apiKey,undefined);assert.equal(JSON.stringify(result).includes(config.apiKey),false);}
+   }
+  }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+ }
+});

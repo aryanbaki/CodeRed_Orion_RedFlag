@@ -28,3 +28,13 @@ export async function checkBackend(config:Backend,fetcher:typeof fetch=fetch):Pr
  const data=JSON.parse(await boundedText(response,8000,signal));
  if(data.schemaVersion!==1||data.model!==config.model||data.promptVersion!==config.promptVersion||data.rubricVersion!==config.rubricVersion||JSON.stringify(data.fallbackModels)!==JSON.stringify(config.fallbackModels??[]))throw Error('Backend versions differ. Import a new connection file.');
 }
+
+/** Pair only with the local server; no provider credentials enter the extension. */
+export async function connectLocalBackend(fetcher:typeof fetch=fetch):Promise<Backend>{
+ const signal=AbortSignal.timeout(5000),baseUrl='http://127.0.0.1:8787';
+ const response=await fetcher(baseUrl+'/api/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',credentials:'omit',redirect:'error',referrerPolicy:'no-referrer',signal});
+ if(!response.ok)throw Error('Start the RedFlag backend, then retry.');
+ const config=parseBackend(JSON.parse(await boundedText(response,8000,signal)));
+ if(!config||config.baseUrl!==baseUrl)throw Error('Local connection unavailable.');
+ await checkBackend(config,fetcher);return config;
+}

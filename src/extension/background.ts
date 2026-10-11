@@ -1,4 +1,4 @@
-import {BACKEND_KEY,parseBackend,checkBackend,type Backend} from '../background/backend.ts';
+import {BACKEND_KEY,parseBackend,checkBackend,connectLocalBackend,type Backend} from '../background/backend.ts';
 import {requestPolicyChat} from '../background/chat.ts';
 import {validChatInput,type ChatCommand,type ChatResponse} from '../core/chat-contracts.ts';
 import {contentHash} from '../background/cache.ts';
@@ -367,11 +367,17 @@ async function chatAction(command:ChatCommand,sender:chrome.runtime.MessageSende
  }catch(error){return reject(controller.signal.aborted?'timeout':'unavailable',controller.signal.aborted?'Chat stopped or timed out. Try again.':error instanceof Error&&error.message.length<=150?error.message:'The policies could not be read. Try again.');}
  finally{clearTimeout(timer);controllers.delete(controller);chatRequests.delete(tab.id!);}
 }
+let localConnection:Promise<Backend>|undefined;
 async function connectionAction(message:{type:string;config?:unknown},sender:chrome.runtime.MessageSender){
  if(!trustedUi(sender))return {ok:false,connected:false,error:'Trusted setup required.'};
- const config=message.type==='redflag/connect-backend'?parseBackend(message.config):await backend();
- if(!config)return {ok:false,connected:false,error:'Import your RedFlag connection file.'};
+ let config=message.type==='redflag/connect-backend'?parseBackend(message.config):await backend();
  try{
+  if(!config&&message.type==='redflag/backend-status'){
+   if(!await permitted('http://127.0.0.1:8787'))throw Error('Allow browser access to the backend.');
+   localConnection??=connectLocalBackend().finally(()=>{localConnection=undefined;});
+   config=await localConnection;await chrome.storage.local.set({[BACKEND_KEY]:config});
+  }
+  if(!config)throw Error('Connection unavailable. Retry or use advanced setup.');
   if(!await permitted(config.baseUrl))throw Error('Allow browser access to the backend.');
   await checkBackend(config);
   if(message.type==='redflag/connect-backend')await chrome.storage.local.set({[BACKEND_KEY]:config});

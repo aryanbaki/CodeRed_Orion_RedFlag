@@ -1,4 +1,4 @@
-# RedFlag 0.3.1
+# RedFlag 0.3.2
 
 A Chrome extension that combines community-reviewed insights and Google Gemini to explain terms and privacy policies, highlight sourced risks, and show personalized reminders before you agree.
 
@@ -8,7 +8,7 @@ A Chrome extension that combines community-reviewed insights and Google Gemini t
 
 - Always-visible overall review with Analyze all, plus Privacy, Cookies, and Terms cards with individual Analyze buttons and retrieved word counts.
 - Red flags show exact source passages, Summary shows supported risks and protections, and Chat answers questions using the retrieved policies with citations.
-- User-supplied glossy flag artwork and Avion typography.
+- User-supplied glossy flag artwork and Merriweather typography.
 - Grades S, A, B, C, D, E; a neutral “?” badge means unknown / Unrated.
 - Installation grants HTTP/HTTPS site access. Public policy links and verified common policy addresses are checked automatically.
 - First-use onboarding enables automatic Gemini analysis or community ratings only. Settings has no priorities questionnaire.
@@ -72,4 +72,6 @@ Research references: [ToS;DR](https://github.com/tosdr/browser-extensions), [Pri
 
 The local endpoints are `POST /api/analyze`, `POST /api/chat`, and authenticated `POST /api/health`. Setup, canonical contracts, consent integration, exact-evidence validation, the explicit grading rubric and simulated-verification limits are documented in [docs/gemini-backend.md](docs/gemini-backend.md). Fill an ignored local `.env` from the blank `.env.example`, then run `npm run start:server`. Keep Google credentials on the server; the extension receives only a separate local access token. Chat and complete retrieved policy text are transient, while bounded evidence and review metadata may be saved in My sites.
 
-Create the versioned loadable archive with `node scripts/package-extension.mjs` after building. It includes manifest.json at its root and excludes local connection credentials. See [current verification](docs/site-review-0.3.1.md).
+Create the versioned loadable archive with `node scripts/package-extension.mjs` after building. It includes manifest.json at its root and excludes local connection credentials. See [current verification](docs/site-review-0.3.2.md).
+
+Version 0.3.2 adds automatic local-backend pairing, concise summaries, and estimated reading minutes saved for successfully analyzed documents. The backend must run on 127.0.0.1:8787; provider keys stay server-side. First-use public-policy consent remains a single Enable checks action.

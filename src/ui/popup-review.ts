@@ -1,3 +1,4 @@
+import {readingTimeSaved} from '../core/reading-time.ts';
 import {isFlagGrade} from './branding.ts';
 import type {RedFlagPreferences,ReviewState} from '../core/contracts.ts';
 import {summarizeReview} from '../core/summary.ts';
@@ -9,11 +10,12 @@ export function gradeBadge(grade:string,className='grade-tile') {
 }
 /** All four grades are visible on first render, including missing-policy states. */
 export function renderPopupReview(container:HTMLElement,state:ReviewState|null,prefs:RedFlagPreferences,analyze:(id:string)=>void,busyIds:ReadonlySet<string>=new Set(),analyzeAll:()=>void=()=>{},scanning=false,siteName='This site'){
- const summary=summarizeReview(state),fragment=document.createDocumentFragment();
+ const saved=readingTimeSaved(state),summary=summarizeReview(state),fragment=document.createDocumentFragment();
  const brand=container.ownerDocument.querySelector<HTMLImageElement>('.brand-logo');
  if(brand)brand.src=`icons/redflag${isFlagGrade(summary.grade)?`-${summary.grade}`:''}-128.png`;
  const card=element('article',undefined,'grade-summary'),copy=element('div',undefined,'overall-copy');
- copy.append(element('p','Overall','eyebrow'),element('h2',siteName),element('p',summary.source==='tosdr'?'ToS;DR community rating':summary.source==='gemini'?'Gemini policy review':scanning?'Looking for policies…':summary.pending?'Analyzing…':'Not enough evidence','meta'));
+ copy.append(element('p','Overall','eyebrow'),element('h2',siteName),element('p',scanning?'Looking for policies…':summary.pending?'Analyzing…':saved.label|| (summary.source==='tosdr'?'ToS;DR community rating':'Not enough evidence'),'meta'));
+ if(saved.words){copy.lastElementChild?.setAttribute('title',`Estimated reading time for ${saved.words.toLocaleString()} analyzed words at 238 words per minute.`);}
  const all=element('button',scanning?'Searching…':'Analyze all');all.id='recheck';all.type='button';all.disabled=scanning||!prefs.enabled;all.setAttribute('aria-label','Analyze all policies');all.addEventListener('click',analyzeAll);
  card.append(gradeBadge(summary.grade),copy,all);fragment.append(card);
  const grid=element('div',undefined,'policy-grid');

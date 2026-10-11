@@ -14,11 +14,11 @@ try {
   document.querySelector('.idle').append(window.branding.gradeBadge('Unrated'));
  });
  await page.evaluate(()=>document.fonts.ready);
- if(!await page.evaluate(()=>[...document.fonts].some(face=>face.family==='Avion'&&face.status==='loaded')))throw new Error('Avion did not load');
+ if(!await page.evaluate(()=>[...document.fonts].some(face=>face.family==='Merriweather'&&face.status==='loaded')))throw new Error('Merriweather did not load');
  for(const grade of ['S','A','B','C','D','E']){
   await expect(page.locator(`[data-grade=${grade}]`)).toHaveCSS('color','rgb(255, 255, 255)');
   await expect(page.locator(`[data-grade=${grade}]`)).toHaveCSS('height','58px');
-  await expect(page.locator(`[data-grade=${grade}]`)).toHaveCSS('font-family','Avion, Arial, sans-serif');
+  await expect(page.locator(`[data-grade=${grade}]`)).toHaveCSS('font-family','Merriweather, Georgia, serif');
  }
  await expect(page.locator('[data-grade=Unrated]')).toHaveText('?');await expect(page.locator('[data-grade=Unrated] svg')).toHaveCount(0);
  await expect(page.locator('[data-grade=Unrated]')).toHaveAttribute('aria-label','Unknown grade');
@@ -32,10 +32,10 @@ try {
   window.brandingPanel=window.branding.mountOverview(window.brandingState,undefined,{onDismiss(){},onOpenSettings(){}});
  });
  const panel=page.getByRole('region',{name:'RedFlag agreement review'});
- await expect(panel.locator('.overall-grade')).toHaveCSS('font-family','Avion, Arial, sans-serif');
- await expect(panel.getByRole('button',{name:'Dismiss'})).toHaveCSS('font-family','Avion, Arial, sans-serif');
+ await expect(panel.locator('.overall-grade')).toHaveCSS('font-family','Merriweather, Georgia, serif');
+ await expect(panel.getByRole('button',{name:'Dismiss'})).toHaveCSS('font-family','Merriweather, Georgia, serif');
  await expect(panel.locator('.overall-grade')).toHaveText('S');await expect(panel.locator('.flag-mark')).toHaveCount(1);
  await page.evaluate(()=>window.brandingPanel.update({...window.brandingState,documents:[]}));
  await expect(panel.locator('.overall-grade')).toHaveText('?');await expect(panel.locator('.flag-mark')).toHaveCount(0);
- console.log('Branding browser checks passed: white S–E squares, neutral unknown badges, Avion font, bottom-right rated/unknown transitions.');
+ console.log('Branding browser checks passed: white S–E squares, neutral unknown badges, Merriweather font, bottom-right rated/unknown transitions.');
 } finally {await browser.close();}

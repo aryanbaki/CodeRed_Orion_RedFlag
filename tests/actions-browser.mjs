@@ -87,6 +87,8 @@ try {
  const other=await context.newPage();await other.goto('https://service.com/empty');await other.evaluate(()=>document.querySelector('form').remove());
  const otherId=await reopened.evaluate(async()=> (await chrome.tabs.query({url:'https://service.com/empty'}))[0].id);
  await expect.poll(()=>worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),otherId)).toBe('?');
+ // The unknown badge can precede the debounced removal discovery; wait for that state too.
+ await expect.poll(()=>worker.evaluate(async tabId=>(await chrome.storage.session.get('redflag.jobs.v1'))['redflag.jobs.v1'].sessions[tabId]?.state.documents.length,otherId)).toBe(0);
  await page.bringToFront();await expect.poll(()=>worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),tabId)).toBe('E');
  await reopened.reload();
  await expect(reopened.locator('#compact-review')).toContainText('2 of 2');
@@ -99,7 +101,8 @@ try {
 
  await worker.evaluate(()=>{globalThis.hold=true;});
  const delayedSaved=await reopened.evaluate(async siteOrigin=>chrome.runtime.sendMessage({type:'redflag/recheck-site',siteOrigin}),savedOrigin);assert.equal(delayedSaved.ok,true);
- await reopened.evaluate(async()=>{const key='redflag.history.v1',data=(await chrome.storage.local.get(key))[key];data.deleted.push(...data.sites.map(s=>({origin:s.origin,generation:s.generation,at:new Date().toISOString()})));data.sites=[];await chrome.storage.local.set({[key]:data});});
+ // Match the history API lock so dashboard normalization cannot overwrite test tombstones.
+ await reopened.evaluate(async()=>navigator.locks.request('redflag-history-v1',async()=>{const key='redflag.history.v1',data=(await chrome.storage.local.get(key))[key];data.deleted.push(...data.sites.map(s=>({origin:s.origin,generation:s.generation,at:new Date().toISOString()})));data.sites=[];await chrome.storage.local.set({[key]:data});}));
  await page.waitForTimeout(500);
  assert.equal(await reopened.evaluate(async()=> (await chrome.storage.local.get('redflag.history.v1'))['redflag.history.v1'].sites.length),0);
  const deletedRecheck=await reopened.evaluate(async siteOrigin=>chrome.runtime.sendMessage({type:'redflag/recheck-site',siteOrigin}),savedOrigin);assert.equal(deletedRecheck.code,'history-unavailable');

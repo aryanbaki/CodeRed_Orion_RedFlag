@@ -97,3 +97,12 @@ Added explicit Gemini free/paid/default profiles while retaining legacy `GEMINI_
 ### Saved credential configuration — 2026-10-11
 
 The user saved both Gemini profile keys locally. Verified configuration without displaying secret values: the selected profile is `free`, the model is `gemini-3.5-flash-lite`, and both key fields are present. A live authenticated Gemini `models.get` request using only the selected free-profile key returned HTTP 200 and reported `generateContent` support. This is live credential/model metadata verification, not a live document analysis or verification of the project's billing tier. No policy text was transmitted, and the paid-profile key was not used. The local server started on `127.0.0.1:8787` and responded to the allowed-origin OPTIONS preflight with HTTP 204. `.env` remains ignored by Git with owner-only file permissions; no credential values are committed.
+
+
+## Integrated RedFlag developer preview — 2026-10-11
+
+Combined analysis/backend, popup, and My Sites worker handoffs in `codex/integration-review` from main `d306957`, preserving the later provider request-field fix and history hardening. `npm run check` passed 48 unit tests plus typecheck/build. Actual unpacked browser suites passed for popup, proactive UI, discovery, actions, dashboard, popup redesign, and backend transport. Provider/retrieval fixtures remain explicitly simulated except the separately recorded live Gemini check in `analysis-actions.md`.
+
+A combined browser test exposed test-only unlocked tombstone writes racing dashboard history normalization. The test now uses the same history lock as the application and waits for debounced empty-page discovery. Product code was unchanged for this correction. Popup route, deletion, and late-navigation assertions remain intact.
+
+The developer ZIP includes built extension files, matching server source, blank configuration example and installation instructions. It excludes actual `.env`, credentials, dependencies and browser profiles. Community ingestion is still unpopulated, HTML coverage remains conservative, and Monoglyphic remains an unfinished typography requirement. Earlier entries above are historical stage records; current live verification and limitations are in the worker handoffs.

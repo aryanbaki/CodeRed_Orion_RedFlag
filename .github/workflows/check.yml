@@ -19,3 +19,5 @@ jobs:
       - run: npm run test:discovery-browser
       - run: npm run test:actions-browser
       - run: npm run test:backend-browser
+      - run: npm run test:popup-redesign
+      - run: npm run test:dashboard

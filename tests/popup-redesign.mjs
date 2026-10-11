@@ -23,6 +23,7 @@ try{
  await page.goto(`chrome-extension://${id}/popup.html`);
  await expect(page.locator('#domain')).toHaveText(domain);await expect(page.locator('.grade-summary')).toHaveCount(0);await expect(page.locator('.policy-row')).toHaveCount(0);await expect(page.locator('#recheck')).toBeEnabled();await page.screenshot({path:'dist/popup-fixture-discovering.png'});
  await page.locator('#settings-link').click();await page.locator('#ai-toggle').click();await page.locator('#settings > summary').click();
+ async function top(){await expect(page.locator('#recheck')).toBeEnabled();await page.locator('.brand').scrollIntoViewIfNeeded();await page.evaluate(async()=>{document.activeElement?.blur();document.body.scrollTop=0;document.documentElement.scrollTop=0;window.scrollTo(0,0);await new Promise(requestAnimationFrame);});const y=await page.locator('.brand').evaluate(n=>n.getBoundingClientRect().top);if(y<0)throw Error('Header missing from capture');}
  const state=documents=>({schemaVersion:1,pageKey:'fixture',pageUrl:`https://${domain}/signup`,context:'signup',documents,updatedAt:now});
  for(const [name,documents] of [
   ['analyzing',[review('terms')]],
@@ -34,11 +35,11 @@ try{
   ['inaccessible',[{...review('terms','Unrated','unrated'),reason:'inaccessible'}]],
  ]){
   await page.evaluate(s=>window.setFixture(s),state(documents));
-  if(name==='empty'){await expect(page.locator('.policy-row')).toHaveCount(0);await expect(page.locator('.grade-summary')).toHaveCount(0);await page.evaluate(()=>{window.scanDenied=true;});await page.locator('#recheck').click();await expect(page.locator('#empty-heading')).toHaveText('Allow site access');await page.screenshot({path:'dist/popup-fixture-permission-empty.png'});await page.evaluate(()=>{window.scanDenied=false;});await page.locator('#recheck').click();}else await expect(page.locator('.policy-row').first()).toContainText('Synthetic');
+  if(name==='empty'){await expect(page.locator('.policy-row')).toHaveCount(0);await expect(page.locator('.grade-summary')).toHaveCount(0);await page.evaluate(()=>{window.scanDenied=true;});await page.locator('#recheck').click();await expect(page.locator('#empty-heading')).toHaveText('Allow site access');await top();await page.screenshot({path:'dist/popup-fixture-permission-empty.png'});await page.evaluate(()=>{window.scanDenied=false;});await page.locator('#recheck').click();}else await expect(page.locator('.policy-row').first()).toContainText('Synthetic');
   if(name==='partial'){await expect(page.locator('.grade-summary')).toContainText('1 of 2');await expect(page.locator('.scope-note')).toContainText('Incomplete');}
   if(name==='rated'){await page.evaluate(async ({domain,now,documents})=>chrome.storage.local.set({'redflag.history.v1':{schemaVersion:1,sites:[{origin:'https://'+domain,firstCheckedAt:now,lastCheckedAt:now,generation:'fixture',context:'signup',documents}],deleted:[]}}),{domain,now,documents});await page.getByRole('button',{name:'Analyze Synthetic Subscription',exact:false}).click();await page.locator('#analyze-all').click();await page.locator('#recheck').click();}
   await page.locator('.important-warning').evaluateAll(nodes=>nodes.forEach(n=>n.open=false));
-  await page.evaluate(()=>{window.scrollTo(0,0);document.body.scrollTop=0;document.documentElement.scrollTop=0;});
+  await top();
   await page.screenshot({path:`dist/popup-fixture-${name}.png`});if(name==='rated'){await page.locator('#recent-items').scrollIntoViewIfNeeded();await page.screenshot({path:'dist/popup-fixture-recent.png'});}
   if(name==='partial'){await page.locator('.important-warning summary').first().click();await page.locator('.important-warning').scrollIntoViewIfNeeded();await page.screenshot({path:'dist/popup-fixture-evidence.png'});}
  }

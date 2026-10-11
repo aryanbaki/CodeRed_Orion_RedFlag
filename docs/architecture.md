@@ -8,13 +8,13 @@ Chrome toolbar action → activeTab permission → user-triggered script reads s
 
 ## Planned production path
 
-1. Extract candidate policy text, display URL and coverage, and let the user confirm transmission.
-2. Community provider resolves a verified domain, returns reviewed points with attribution and timestamps. Prefer local catalog matching if authorized access and size permit it; otherwise disclose the queried domain.
-3. Authenticated backend receives only approved policy text. Apply size limits, timeouts, abuse protection, per-user quotas, and no raw-text logging.
-4. Server-only Gemini adapter returns categorized explanations with exact source passages.
-5. Validate schema and quotes, then separately assess interpretation quality. Render plain text; provider/model HTML is never trusted.
-6. Keep community findings and AI interpretation distinct. Reorder using local preferences; do not change provider ratings or evidence.
-7. Later, opt-in site adapters offer dismissible reminders. Never accept, decline, or block consent on the user's behalf.
+1. After initial enablement and site permission setup, an isolated content script automatically discovers legal-document links in signup, checkout, onboarding, and consent contexts, including dynamically added dialogs. No policy-link click or toolbar invocation is required. Match legal labels and actual URLs, resolve relative URLs, and scan only relevant changed subtrees.
+2. Validate content-script messages and discovered URLs. A Manifest V3 service worker retrieves public documents in the background using appropriate origin permissions, bounded requests, credentials omitted, and validated redirects. Unsupported content, denied permissions, authentication requirements, and inaccessible documents yield a visible Unrated state; never bypass them or navigate the user's tabs.
+3. Resolve applicable cached/community results first, preserving domain/document scope, provider attribution, review status, and freshness. Prefer local catalog matching if authorized access and size permit it; otherwise disclose the queried domain. Community service ratings remain separate from document-specific assessments.
+4. If evidence is missing, incomplete, or outdated, queue independent Gemini analyses only after explicit, revocable external-AI opt-in. The stored opt-in enables background processing without per-document clicks. An authenticated backend receives only relevant public legal-document text; enforce request limits, timeouts, abuse protection, per-user quotas, and no raw-text logging. Block private-network fetching and omit form/account content.
+5. The server-only Gemini adapter returns findings with exact passages. Validate schema and quotations, assess interpretation quality, and calculate separate Terms/Privacy grades under a documented rubric. Track Additional Terms independently. Insufficient evidence is Unrated. Render plain text; provider/model HTML is never trusted.
+6. Show a dismissible pre-consent warning immediately with pending/available results, then update a concise overview as each agreement completes. Preserve per-document citations, grades, freshness, and unavailable states. Local priorities reorder findings without modifying ratings or evidence. Never automatically accept, decline, tick, submit, or block consent controls; routine browsing never waits on Gemini.
+7. Deduplicate discovery and in-flight work; cache by document identity/hash and model/prompt/rubric versions with expiry and invalidation. Persist recoverable job state outside service-worker memory, and guard results against navigation changes. Full automatic discovery and proactive analysis are P0; broader site support and history monitoring follow later.
 
 The server transport, authentication, rate limiting, provider cache, and transmission consent UI do not exist yet. The exported Gemini adapter is a library building block only; it is not an exposed service.
 

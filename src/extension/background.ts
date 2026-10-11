@@ -242,7 +242,7 @@ async function discover(tabId:number,browserDocumentId:string | undefined,pageUr
     await publish(tabId,generation);void pump();
   });
   session.state.context=context;
-  session.state.documents = session.state.documents.filter(review => review.document.id.startsWith('common-') || documents.some(d => d.url === review.document.url && d.kind === review.document.kind));
+  session.state.documents = session.state.documents.filter(review => review.document.id.startsWith('common-') || review.document.id.startsWith('manual-') || documents.some(d => d.url === review.document.url && d.kind === review.document.kind));
   snapshot.jobs = snapshot.jobs.filter(job => job.pageKey !== session.state.pageKey || session.state.documents.some(d => d.document.id === job.documentId));
   for (const document of documents) {
     if (session.state.documents.some(d => d.document.url === document.url && d.document.kind === document.kind)) continue;
@@ -396,6 +396,25 @@ chrome.runtime.onMessage.addListener((message,sender,reply) => {
   void (async () => {
     await initialized;
     switch (message.type) {
+      case 'redflag/rescan-policies': {
+        if(!trustedUi(sender))return {ok:false,error:'Trusted controls required.'};
+        const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+        if(!tab?.id||!tab.url||!/^https?:/.test(tab.url))return {ok:false,error:'Open a website.'};
+        commonRequests.delete(new URL(tab.url).origin);return scanCurrent({type:'redflag/scan-current',tabId:tab.id},sender);
+      }
+      case 'redflag/add-policy': {
+        if(!trustedUi(sender)||typeof message.url!=='string'||message.url.length>2000||!['privacy','terms','cookies','unknown'].includes(message.kind))return {ok:false,error:'Choose a public policy link and type.'};
+        if(!permitsAi(await preferences()))return {ok:false,error:'Enable checks first.'};
+        const [tab]=await chrome.tabs.query({active:true,currentWindow:true}),session=tab?.id!==undefined?snapshot.sessions[tab.id]:undefined;
+        if(!session||session.state.pageKey!==message.pageKey||!tab?.url||safePageUrl(tab.url)!==session.state.pageUrl)return {ok:false,error:'The website changed. Reopen RedFlag.'};
+        let url:string;try{url=publicDocumentUrl(message.url);}catch{return {ok:false,error:'Use a public HTTP or HTTPS link without sign-in tokens.'};}
+        if(!await permitted(url))return {ok:false,error:'Allow browser access to that policy site.'};
+        if(session.state.documents.length>=24)return {ok:false,error:'This review has reached its policy limit.'};
+        let review=session.state.documents.find(d=>d.document.url===url);
+        if(!review){const document:DiscoveredDocument={id:'manual-'+crypto.randomUUID(),url,kind:message.kind,label:message.kind==='unknown'?'Supplied page':'Supplied policy',discoveredAt:new Date().toISOString()};review=pendingState(session.state.pageKey,session.state.pageUrl,session.state.context,[document]).documents[0];session.state.documents.push(review);}
+        if(!snapshot.jobs.some(j=>j.pageKey===session.state.pageKey&&j.documentId===review!.document.id))snapshot.jobs.push({tabId:tab.id!,pageKey:session.state.pageKey,documentId:review.document.id,attempts:0});
+        await publish(tab.id!,session.state.pageKey);void pump();return {ok:true,state:structuredClone(session.state)};
+      }
       case 'redflag/reset-device': {
         if(!trustedUi(sender))return {ok:false,error:'Trusted settings required.'};
         erasingDevice=true;dataEpoch++;try{
@@ -444,7 +463,8 @@ chrome.runtime.onMessage.addListener((message,sender,reply) => {
         return {ok:true,state:tabId === undefined ? null : snapshot.sessions[tabId]?.state ?? null};
       }
       case 'redflag/internal-open-settings': {
-        await chrome.tabs.create({url:chrome.runtime.getURL('popup.html')});return {ok:true};
+        if(!sender.tab?.id||sender.frameId!==0)return {ok:false};
+        try{await chrome.action.openPopup({windowId:sender.tab.windowId});return {ok:true};}catch{return {ok:false,error:'Open RedFlag from the toolbar.'};}
       }
       default: throw new Error('Unknown message');
     }

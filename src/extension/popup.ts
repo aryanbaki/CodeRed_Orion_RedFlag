@@ -1,4 +1,5 @@
 import {CUSTOM_INTERESTS_KEY,interestChoices,normalizeCustomInterests,prioritizeFindings} from '../core/interests.ts';
+import {summarizeReview} from '../core/summary.ts';
 import {requestCurrentScan} from '../core/discovery-actions.ts';
 import {requestAnalysis} from '../core/analysis-actions.ts';
 import {applyTheme} from '../ui/theme.ts';
@@ -37,17 +38,27 @@ function paintInsights(){
  for(const f of findings)flags.append(citedCard(f));
  if(!findings.length)flags.append(element('p',insights.pending?'Reading policies…':insights.summaries.length?'No supported red flags in the text reviewed.':'Analyze policies to see what matters.','empty-state'));
  if(!insights.summaries.length){summary.append(element('p',insights.pending?'Reading policies…':'Your overview will appear after analysis.','empty-state'));return;}
- const overview=element('article',undefined,'summary-overview');overview.append(element('p','THE QUICK READ','eyebrow'),element('h2',findings.length?'What you’re agreeing to':'What the policies say'));
- const points=element('ul',undefined,'summary-points');
- for(const f of findings.slice(0,3)){const li=element('li');li.append(element('strong',f.title+' — '),document.createTextNode(f.explanation));points.append(li);}
- if(!findings.length)points.append(element('li','No supported risks were identified in the reviewed text. This does not establish that every practice is covered.'));
- overview.append(points);
+ const overview=element('article',undefined,'summary-overview');overview.append(element('p','THE QUICK READ','eyebrow'),element('h2','What these policies mean'));
+ const positive=insights.protections[0]?.explanation,negative=findings[0]?.explanation;
+ overview.append(element('p',[positive,negative].filter(Boolean).join(' ')||'The reviewed text does not provide enough supported evidence to describe the main benefits or risks.','summary-prose'));
  const kinds=new Set(insights.summaries.map(s=>s.label)),partial=insights.summaries.some(s=>s.partial);
- overview.append(element('p',`${kinds.size} policy ${kinds.size===1?'type':'types'} reviewed${partial?' · Some text is incomplete':''}. Grades stay unknown where evidence is missing.`,'summary-coverage'));summary.append(overview);
- if(insights.protections.length){summary.append(element('h3','Working in your favor','summary-section-title'));for(const p of insights.protections.slice(0,2))summary.append(citedCard(p,true));}
- summary.append(element('h3','Policy notes','summary-section-title'));
- for(const s of insights.summaries){const card=element('details',undefined,'summary-card summary-detail');card.append(element('summary',s.label+(s.partial?' · Partial':'')),element('p',s.text));summary.append(card);}
+ overview.append(element('p',`${kinds.size} policy ${kinds.size===1?'type':'types'} reviewed${partial?' · Some text is incomplete':''}.`,'summary-coverage'));summary.append(overview);
+ summary.append(element('h3','On your side','summary-section-title'));
+ if(insights.protections.length)for(const p of insights.protections.slice(0,3))summary.append(citedCard(p,true));
+ else summary.append(element('p','No positive clauses could be confirmed in the reviewed text.','summary-neutral'));
+ const profile=element('section',undefined,'grade-profile'),grades=summarizeReview(state);
+ profile.append(element('h3','Policy grade profile'),element('p','S is strongest · E is weakest · ? needs more evidence','meta'));
+ for(const [label,grade] of [['Privacy',grades.privacyGrade],['Cookies',grades.cookiesGrade],['Terms',grades.termsGrade]]){
+  const row=element('div',undefined,'grade-profile-row'),bar=element('div',undefined,'grade-bar'),rank=['E','D','C','B','A','S'].indexOf(grade);
+  const fill=element('span');fill.style.width=rank<0?'0%':`${(rank+1)/6*100}%`;bar.append(fill);bar.setAttribute('role','img');bar.setAttribute('aria-label',`${label}: ${rank<0?'unknown grade':grade}`);row.append(element('span',label),bar,element('strong',rank<0?'?':grade));profile.append(row);
+ }summary.append(profile);
+ summary.append(element('h3','Keep in mind','summary-section-title'));
+ if(findings.length)for(const f of findings.slice(0,3))summary.append(citedCard(f));
+ else summary.append(element('p','No supported red flags were identified. Missing evidence can still prevent a grade.','summary-neutral'));
+ const notes=element('details',undefined,'summary-card summary-detail');notes.append(element('summary','More about each policy'));
+ for(const s of insights.summaries){notes.append(element('h3',s.label+(s.partial?' · Partial':'')),element('p',s.text));}summary.append(notes);
 }
+
 function paintInterests(){
  const choices=get('interest-choices');choices.replaceChildren();
  for(const choice of interestChoices){const button=element('button',choice.label,'interest-choice');button.type='button';button.dataset.category=choice.category;button.setAttribute('aria-pressed',String(chosenInterests.has(choice.category)));button.append(element('span',choice.detail));button.addEventListener('click',()=>{chosenInterests.has(choice.category)?chosenInterests.delete(choice.category):chosenInterests.add(choice.category);paintInterests();});choices.append(button);}
@@ -62,6 +73,7 @@ function paint(){
  get<HTMLInputElement>('review-enabled').checked=preferences.enabled;
  get('ai-state').textContent=preferences.aiConsent.enabled?connected?'Gemini connected':'Gemini connection needed':'Community ratings only';
  const scanning=busy||Boolean(state?.discoveryPending);
+ get('no-policies').hidden=Boolean(scanning||!pageUrl||state?.documents.length);get('add-policy').hidden=!pageUrl;
  get('loading').hidden=!scanning;get('compact-review').hidden=!pageUrl;
  if(pageUrl)renderPopupReview(get('compact-review'),state,preferences,id=>void analyzePolicy(id),busyIds,()=>void analyzeAll(),busy,siteName);
  get<HTMLButtonElement>('chat-send').disabled=chatBusy||!pageUrl||!preferences.enabled;
@@ -116,6 +128,9 @@ async function sendChat(){
 get('settings-link').addEventListener('click',()=>{get<HTMLDetailsElement>('settings').open=!get<HTMLDetailsElement>('settings').open;get('settings').scrollIntoView();});
 get('open-summary').addEventListener('click',()=>void chrome.tabs.create({url:chrome.runtime.getURL('dashboard.html')}));
 get('setup').addEventListener('click',()=>{chosenInterests=new Set(preferences.priorities);paintInterests();get('onboarding').hidden=false;get('interest-step').hidden=false;get('consent-step').hidden=true;get('onboarding').scrollIntoView();});
+get('find-policies').addEventListener('click',()=>void (async()=>{busy=true;paint();try{const result=await chrome.runtime.sendMessage({type:'redflag/rescan-policies'});if(result?.ok)acceptState(result.state);else get('action-status').textContent=result?.error??'Could not check this site.';}finally{busy=false;paint();}})());
+get('review-page').addEventListener('click',()=>{get<HTMLInputElement>('policy-url').value=pageUrl??'';get<HTMLSelectElement>('policy-kind').value='unknown';get<HTMLInputElement>('policy-url').focus();});
+get('policy-form').addEventListener('submit',event=>{event.preventDefault();void (async()=>{if(!canAnalyze())return;await scan();if(!state)return;const button=get<HTMLButtonElement>('add-policy-submit');button.disabled=true;try{const result=await chrome.runtime.sendMessage({type:'redflag/add-policy',pageKey:state.pageKey,url:get<HTMLInputElement>('policy-url').value,kind:get<HTMLSelectElement>('policy-kind').value});if(result?.ok){acceptState(result.state);get<HTMLInputElement>('policy-url').value='';}else get('action-status').textContent=result?.error??'Could not add this policy.';}catch{get('action-status').textContent='Could not add this policy.';}finally{button.disabled=false;paint();}})();});
 get('device-vault').addEventListener('click',()=>void chrome.tabs.create({url:chrome.runtime.getURL('data.html')}));
 get('onboarding-next').addEventListener('click',()=>void saveInterests());get('skip-interests').addEventListener('click',()=>void saveInterests(true));
 get('add-interest').addEventListener('click',()=>{const input=get<HTMLInputElement>('custom-interest');if(customInterests.length>=5){get('interest-status').textContent='Choose up to five custom interests.';return;}customInterests=normalizeCustomInterests([...customInterests,input.value]);input.value='';paintInterests();});

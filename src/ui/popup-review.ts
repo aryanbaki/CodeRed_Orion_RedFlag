@@ -1,3 +1,4 @@
+import {reviewDates} from '../core/review-dates.ts';
 import {readingTimeSaved} from '../core/reading-time.ts';
 import {isFlagGrade} from './branding.ts';
 import type {RedFlagPreferences,ReviewState} from '../core/contracts.ts';
@@ -16,6 +17,7 @@ export function renderPopupReview(container:HTMLElement,state:ReviewState|null,p
  const card=element('article',undefined,'grade-summary'),copy=element('div',undefined,'overall-copy');
  copy.append(element('p','Overall','eyebrow'),element('h2',siteName),element('p',scanning?'Looking for policies…':summary.pending?'Analyzing…':saved.label|| (summary.source==='tosdr'?'ToS;DR community rating':'Not enough evidence'),'meta'));
  if(saved.words){copy.lastElementChild?.setAttribute('title',`Estimated reading time for ${saved.words.toLocaleString()} analyzed words at 238 words per minute.`);}
+ const dates=reviewDates(state);if(dates.label){const date=element('p',dates.label,'review-date');date.title=dates.updated?'Publisher date from retrieved policy metadata.':'Review date; the publisher’s update date was not available.';copy.append(date);}
  const all=element('button',scanning?'Searching…':'Analyze all');all.id='recheck';all.type='button';all.disabled=scanning||!prefs.enabled;all.setAttribute('aria-label','Analyze all policies');all.addEventListener('click',analyzeAll);
  card.append(gradeBadge(summary.grade),copy,all);fragment.append(card);
  const grid=element('div',undefined,'policy-grid');

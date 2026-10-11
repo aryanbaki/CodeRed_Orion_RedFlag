@@ -48,7 +48,7 @@ try {
     await expect.poll(async () => (await getState())?.documents.length).toBe(5);
     await expect.poll(async () => (await getState())?.documents.every(d=>d.status==='unrated')).toBe(true);
     const state=await getState();assert.equal(state.context,kind);assert.ok(state.documents.every(d=>d.reason==='ai-consent-required'));assert.equal(state.documents.filter(d=>d.document.kind==='terms').length,3);
-    if(withOverview){await expect(page.getByRole('region',{name:'RedFlag agreement review'})).toBeVisible();await expect(page.getByRole('region',{name:'RedFlag agreement review'})).toContainText('Overall grade');await expect(page.getByRole('region',{name:'RedFlag agreement review'}).locator('.overall-grade')).toHaveText('?');}
+    if(withOverview){await expect(page.getByRole('region',{name:'RedFlag agreement review'})).toBeVisible();await expect(page.getByRole('region',{name:'RedFlag agreement review'})).toContainText('Before you agree');await expect(page.getByRole('region',{name:'RedFlag agreement review'}).locator('.overall-grade')).toHaveText('?');}
     assert.equal(await page.locator('#agree').isChecked(),false);assert.equal(page.url(),'https://service.com/'+path);
   }
   const oldPageKey=(await getState()).pageKey;

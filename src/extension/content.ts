@@ -17,7 +17,7 @@ function install() {
  let stop:(()=>void) | undefined;
  const request=async(message:unknown):Promise<ExtensionResponse>=>chrome.runtime.sendMessage(message);
  function render() {
-  if(!enabled || !state || state.context==='browsing' || !state.documents.length || !prefs.enabled || dismissed) {controller?.destroy();controller=undefined;return;}
+  if(!enabled || !state || state.context==='browsing' && !documents.size || !state.documents.length || !prefs.enabled || dismissed) {controller?.destroy();controller=undefined;return;}
   if(controller) controller.update(state,prefs);
   else controller=mountOverview(state,prefs,{onDismiss:()=>{dismissed=true;controller?.destroy();controller=undefined;},onOpenSettings:()=>{void chrome.runtime.sendMessage({type:'redflag/internal-open-settings'}).catch(()=>{});}});
  }

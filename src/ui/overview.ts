@@ -43,11 +43,12 @@ function mountProactiveWarning(options: WarningOptions) {
     if (preferences?.enabled === false) {host.remove();return;}
     if (!host.isConnected) container.append(host);
     const summary=summarizeReview(result);
+    const reminder=result.context==='browsing';heading.querySelector('.eyebrow')!.textContent=reminder?'REDFLAG · PUBLIC POLICIES':'REDFLAG · BEFORE YOU AGREE';panel.classList.toggle('compact-reminder',reminder);heading.querySelector('h2')!.textContent=reminder?'Policies found':'Before you agree';settings.textContent=reminder?'Check policies':'Open RedFlag';
     const mark=element('div',undefined,'site-grade-mark',doc);
     if(summary.grade!=='Unrated')mark.append(flagMark(summary.grade,doc));
     const tile=element('div',summary.grade==='Unrated'?'?':summary.grade,'overall-grade',doc);tile.dataset.grade=summary.grade;tile.setAttribute('aria-label',summary.grade==='Unrated'?'Unknown grade':`Grade ${summary.grade}`);mark.append(tile);
     content.replaceChildren(mark);
-    status.textContent=summary.pending?'Analyzing policies…':summary.source==='tosdr'?'ToS;DR community rating':summary.source==='gemini'?'Gemini analysis':'Not enough information';
+    status.textContent=!preferences?.aiConsent.enabled?'Review this site’s public policies?':summary.pending?'Analyzing policies…':summary.source==='tosdr'?'ToS;DR community rating':summary.source==='gemini'?'Gemini analysis':'Not enough information';
   };
   dismiss.addEventListener('click', () => {
     dismissed = true; host.remove(); options.onDismiss?.();

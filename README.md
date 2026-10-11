@@ -1,4 +1,4 @@
-# RedFlag 0.3.3
+# RedFlag 0.3.4
 
 A Chrome extension that combines community-reviewed insights and Google Gemini to explain terms and privacy policies, highlight sourced risks, and show personalized reminders before you agree.
 
@@ -72,8 +72,10 @@ Research references: [ToS;DR](https://github.com/tosdr/browser-extensions), [Pri
 
 The local endpoints are `POST /api/analyze`, `POST /api/chat`, and authenticated `POST /api/health`. Setup, canonical contracts, consent integration, exact-evidence validation, the explicit grading rubric and simulated-verification limits are documented in [docs/gemini-backend.md](docs/gemini-backend.md). Fill an ignored local `.env` from the blank `.env.example`, then run `npm run start:server`. Keep Google credentials on the server; the extension receives only a separate local access token. Chat and complete retrieved policy text are transient, while bounded evidence and review metadata may be saved in My sites.
 
-Create the versioned loadable archive with `node scripts/package-extension.mjs` after building. It includes manifest.json at its root and excludes local connection credentials. See [current verification](docs/site-review-0.3.3.md).
+Create the versioned loadable archive with `node scripts/package-extension.mjs` after building. It includes manifest.json at its root and excludes local connection credentials. See [current verification](docs/site-review-0.3.4.md).
 
 Version 0.3.2 adds automatic local-backend pairing, concise summaries, and estimated reading minutes saved for successfully analyzed documents. The backend must run on 127.0.0.1:8787; provider keys stay server-side. First-use public-policy consent remains a single Enable checks action.
 
 Version 0.3.3 widens the popup to 480px, keeps Merriweather headings with sans-serif interface copy, replaces the long Summary with a concise overview and expandable notes, and adds a two-step first-use interests/consent flow. Optional interests reorder verified findings without changing grades. Device vault offers individual review deletion, review clearing, credential-free JSON export and a complete device reset that pauses checks. No account or sign-in is required.
+
+Version 0.3.4 adds prose summaries with positives first, ordinal S–E grade bars, distinct review/publisher dates, manual public-policy links, common-address retries, and compact reminders for observed legal links during ordinary browsing. Signup/consent pages still get a dismissible agreement review. Reminder actions open the toolbar popup (Chrome 127+), preserving the website tab for analysis and chat.

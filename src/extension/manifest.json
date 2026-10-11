@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "RedFlag",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Simple grades for website privacy, terms, and cookie policies.",
   "permissions": [
     "activeTab",
@@ -33,7 +33,7 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "minimum_chrome_version": "120",
+  "minimum_chrome_version": "127",
   "host_permissions": [
     "http://*/*",
     "https://*/*"

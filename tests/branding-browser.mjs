@@ -16,7 +16,7 @@ try {
  await page.evaluate(()=>document.fonts.ready);
  if(!await page.evaluate(()=>[...document.fonts].some(face=>face.family==='Merriweather'&&face.status==='loaded')))throw new Error('Merriweather did not load');
  for(const grade of ['S','A','B','C','D','E']){
-  await expect(page.locator(`[data-grade=${grade}]`)).toHaveCSS('color','rgb(255, 255, 255)');
+  await expect(page.locator(`[data-grade=${grade}]`)).toHaveCSS('color',['D','E'].includes(grade)?'rgb(255, 255, 255)':'rgb(51, 36, 28)');
   await expect(page.locator(`[data-grade=${grade}]`)).toHaveCSS('height','58px');
   await expect(page.locator(`[data-grade=${grade}]`)).toHaveCSS('font-family','Merriweather, Georgia, serif');
  }
@@ -33,9 +33,9 @@ try {
  });
  const panel=page.getByRole('region',{name:'RedFlag agreement review'});
  await expect(panel.locator('.overall-grade')).toHaveCSS('font-family','Merriweather, Georgia, serif');
- await expect(panel.getByRole('button',{name:'Dismiss'})).toHaveCSS('font-family','Merriweather, Georgia, serif');
+ await expect(panel.getByRole('button',{name:'Dismiss'})).toHaveCSS('font-family','Arial, sans-serif');
  await expect(panel.locator('.overall-grade')).toHaveText('S');await expect(panel.locator('.flag-mark')).toHaveCount(1);
  await page.evaluate(()=>window.brandingPanel.update({...window.brandingState,documents:[]}));
  await expect(panel.locator('.overall-grade')).toHaveText('?');await expect(panel.locator('.flag-mark')).toHaveCount(0);
- console.log('Branding browser checks passed: white S–E squares, neutral unknown badges, Merriweather font, bottom-right rated/unknown transitions.');
+ console.log('Branding browser checks passed: readable S–E squares, neutral unknown badges, Merriweather font, bottom-right rated/unknown transitions.');
 } finally {await browser.close();}

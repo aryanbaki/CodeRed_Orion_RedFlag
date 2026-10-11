@@ -1,7 +1,7 @@
+import {legalLabel} from './legal-label.ts';
 import {publicDocumentUrl} from './urls.ts';
 export type LegalKind = 'terms' | 'privacy' | 'cookies' | 'additional';
 export interface DiscoveredLink {url: string; kind: LegalKind; label: string; element?: HTMLAnchorElement; consent?:boolean}
-const legal = /\b(cookie\s*polic(?:y|ies)|additional\s*terms|terms\s*(?:of\s*(?:service|use)|(?:and|&)\s*conditions)|privacy\s*polic(?:y|ies))\b/i;
 const shortLegal = /^(terms|privacy|cookies)$/i;
 const agreement = /\b(sign\s*up|register|create\s*(?:an?\s*)?account|checkout|onboarding|consent|agree|accept|by\s*(?:continuing|proceeding)|get\s*started)\b/i;
 const explicitAgreement = /\b((?:i|you|we)\s+(?:agree|accept)|by\s*(?:continuing|proceeding|signing\s*up)|agree\s+to|accept\s+(?:the|these|our)\s+(?:terms|privacy)|consent\s+to)\b/i;
@@ -35,34 +35,41 @@ export function discoverLegalLinks(root: ParentNode, base: string, deduplicate =
     const names = [staticText(link), link.getAttribute('aria-label') ?? '', link.getAttribute('title') ?? ''];
     const labelled = link.getAttribute('aria-labelledby')?.split(/\s+/).map(id => link.ownerDocument.getElementById(id)).filter(Boolean) as Element[] | undefined;
     if (labelled) names.push(...labelled.map(staticText));
-    const match = names.join(' ').match(legal) ?? names.map(name=>name.trim().match(shortLegal)).find(Boolean);
+    const explicit=legalLabel(names.join(' '));
+    const match = explicit ? [explicit.label] : names.map(name=>name.trim().match(shortLegal)).find(Boolean);
     if (!match) continue;
     try {
       const url = publicDocumentUrl(link.getAttribute('href')!, base);
       const label = match[0];
       if(shortLegal.test(label) && (/\/(?:blog|articles?|settings|issues|pull|discussions)(?:\/|$)/i.test(new URL(url).pathname) ||
         !/\/(?:site-policy|policies|legal|cookies?(?:-policy)?|privacy(?:-policy)?|terms(?:-of-(?:service|use))?)(?:\/|$)/i.test(new URL(url).pathname))) continue;
-      const kind = /cookie/i.test(label) ? 'cookies' : /privacy/i.test(label) ? 'privacy' : /additional/i.test(label) ? 'additional' : 'terms';
+      const kinds = explicit?.kinds ?? [/cookie/i.test(label) ? 'cookies' : /privacy/i.test(label) ? 'privacy' : /additional/i.test(label) ? 'additional' : 'terms'];
+      for(const kind of kinds) {
       // A shared URL with distinct scopes is still two agreements.
       const key=deduplicate ? kind + ':' + url : String(results.size);
       const consent=inContext(link) || results.get(key)?.consent === true;
-      results.set(key, {url, kind, label, element:link as HTMLAnchorElement,consent});
+      results.set(key, {url, kind:kind as LegalKind, label, element:link as HTMLAnchorElement,consent});
+      }
     } catch { /* Invalid/unsafe links never become fetch requests. */ }
   }
   return [...results.values()];
 }
 export function observeLegalLinks(document: Document, emit: (links: DiscoveredLink[]) => void): () => void {
   const roots = new Set<ParentNode>();
-  const tracked = new Map<Element,DiscoveredLink>();
+  const tracked = new Map<Element,DiscoveredLink[]>();
   let signature: string | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const flush = () => {
     timer = undefined;
     for (const [element] of tracked) if (!element.isConnected || [...roots].some(root => root instanceof Node && root.contains(element))) tracked.delete(element);
-    for (const root of roots) for (const link of discoverLegalLinks(root, document.baseURI,false)) if (link.element) tracked.set(link.element,link);
+    for (const root of roots) for (const link of discoverLegalLinks(root, document.baseURI,false)) if (link.element) {
+      const scopes=tracked.get(link.element)??[];
+      if(!scopes.some(existing=>existing.kind===link.kind&&existing.url===link.url))scopes.push(link);
+      tracked.set(link.element,scopes);
+    }
     roots.clear();
     const links = new Map<string,DiscoveredLink>();
-    for (const link of tracked.values()) {
+    for (const link of [...tracked.values()].flat()) {
       const key=link.kind + ':' + link.url;
       links.set(key,{...link,consent:link.consent || links.get(key)?.consent === true});
     }

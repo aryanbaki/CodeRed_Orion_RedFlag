@@ -1,3 +1,4 @@
+import {legalLabel} from '../discovery/legal-label.ts';
 import {MAX_POLICY_CHARACTERS} from '../core/policy-text.ts';
 export interface Extraction {text: string; coverage: 'complete' | 'partial'; reason?: string}
 /** Runs only on the freshly downloaded, credential-free legal document in a
@@ -8,9 +9,21 @@ export function extractLegalText(body: string, type: 'html' | 'text', parser: DO
   if (document.querySelector('input[type="password"]') || /\b(sign in|log in)\b/i.test(document.title)) {
     return {text:'',coverage:'partial',reason:'authentication-required'};
   }
-  const legalRoot=document.querySelector('main,article,[role="main"]');
-  const legalHeading=legalRoot?.querySelector('h1,h2')?.textContent ?? document.title;
-  const staticPolicy=Boolean(legalRoot && /\b(privacy\s+polic(?:y|ies)|cookie\s+polic(?:y|ies)|terms(?:\s+of\s+(?:service|use)|\s+(?:and|&)\s+conditions)?)\b/i.test(legalHeading) &&
+  let legalRoot=document.querySelector('main,article,[role="main"]');
+  // Adobe Core Components often place legal prose in sibling rich-text blocks
+  // instead of a semantic main. Accept that explicit CMS structure only when
+  // the page title and visible hero heading both identify a legal document.
+  if(!legalRoot && legalLabel(document.title)) {
+    const heading=[...document.querySelectorAll('h1')].find(h=>legalLabel(h.textContent??'') && !h.closest('nav,header,footer,[hidden],[aria-hidden="true"],.meganav'));
+    const blocks=[...document.querySelectorAll('.cmp-text')].filter(n=>!n.closest('nav,header,footer,[role="navigation"],[role="contentinfo"]'));
+    if(heading && blocks.length && blocks.every(n=>!n.closest('[hidden],[aria-hidden="true"]'))) {
+      legalRoot=document.createElement('article');
+      legalRoot.append(heading.cloneNode(true),...blocks.map(n=>n.cloneNode(true)));
+      document.body.replaceChildren(legalRoot);
+    }
+  }
+  const legalHeading=[...legalRoot?.querySelectorAll('h1,h2')??[]].some(h=>legalLabel(h.textContent??''));
+  const staticPolicy=Boolean(legalRoot && legalHeading &&
     !legalRoot.querySelector('[hidden],[aria-hidden="true"],[aria-busy="true"],[style*="display:none"],[style*="display: none"],iframe,input,textarea,[contenteditable]'));
   // Prevent UI fields, templates, scripts and account content from becoming evidence.
   document.querySelectorAll('script,style,noscript,template,iframe,form,input,textarea,select,button,[contenteditable],nav,footer,[hidden],[aria-hidden="true"]').forEach(node => node.remove());

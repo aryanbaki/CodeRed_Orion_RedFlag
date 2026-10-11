@@ -32,7 +32,7 @@ try {
  });
  const controls=await context.newPage();await controls.goto(`chrome-extension://${id}/popup.html`);
  await controls.evaluate(async()=>{
-  const now=new Date().toISOString();await chrome.storage.local.set({'redflag.backend.v1':{baseUrl:'https://documents.org',accessToken:'synthetic-backend-access-token-123456',model:'gemini-test',promptVersion:'redflag.prompt.v2',rubricVersion:'redflag.rubric.v3'},'redflag.preferences.v1':{schemaVersion:1,enabled:true,priorities:[],aiConsent:{enabled:false,updatedAt:now,noticeVersion:'2026-10-11-v1'}}});
+  const now=new Date().toISOString();await chrome.storage.local.set({'redflag.onboarding.v1':true,'redflag.backend.v1':{baseUrl:'https://documents.org',accessToken:'synthetic-backend-access-token-123456',model:'gemini-test',promptVersion:'redflag.prompt.v2',rubricVersion:'redflag.rubric.v3'},'redflag.preferences.v1':{schemaVersion:1,enabled:true,priorities:[],aiConsent:{enabled:false,updatedAt:now,noticeVersion:'2026-10-11-v1'}}});
  });
  const page=await context.newPage();const fixture='<form><h1>Signup</h1><input id="email"><label><input id="agree" type="checkbox">I agree to <a href="/terms">Terms of Service</a> and <a href="https://documents.org/privacy">Privacy Policy</a></label><button>Continue</button></form>';
  await context.route('https://service.com/**',route=>route.fulfill({body:fixture,contentType:'text/html'}));
@@ -53,7 +53,8 @@ try {
  // Exercise the real popup controls against the actual worker, keeping the site tab active.
  await controls.evaluate(async tabId=>chrome.tabs.update(tabId,{active:true}),tabId);
  await controls.reload();
- await expect(controls.locator('#compact-review')).toContainText('Gemini policy review');
+ await expect(controls.locator('.overall-copy h2')).toHaveText('service.com');
+ await expect(controls.locator('.grade-summary .grade-tile')).toHaveText('E');
  await controls.getByRole('button',{name:'Analyze Terms of service',exact:true}).click();
  await expect.poll(async()=> (await state()).documents.every(d=>d.status==='ready')).toBe(true);
  const beforeRecheck=await worker.evaluate(()=>requests.filter(r=>r.url.endsWith('/api/analyze')).length);
@@ -94,9 +95,11 @@ try {
  await expect.poll(()=>worker.evaluate(async tabId=>(await chrome.storage.session.get('redflag.jobs.v1'))['redflag.jobs.v1'].sessions[tabId]?.state.documents.length,otherId)).toBe(0);
  await page.bringToFront();await expect.poll(()=>worker.evaluate(async tabId=>chrome.action.getBadgeText({tabId}),tabId)).toBe('E');
  await reopened.reload();
- await expect(reopened.locator('#compact-review')).toContainText('Gemini policy review');
- const summaryOpened=context.waitForEvent('page');await reopened.locator('#open-summary').click();const summaryTab=await summaryOpened;await summaryTab.waitForLoadState();assert.equal(new URL(summaryTab.url()).hash,'');await expect(summaryTab.locator('main')).toContainText('service.com');
- const recentOpened=context.waitForEvent('page');await reopened.getByRole('button',{name:'Open saved review for service.com',exact:true}).click();const recentTab=await recentOpened;await recentTab.waitForLoadState();assert.equal(new URL(recentTab.url()).hash,'#site=https%3A%2F%2Fservice.com');
+ await expect(reopened.locator('.overall-copy h2')).toHaveText('service.com');
+ await expect(reopened.locator('.grade-summary .grade-tile')).toHaveText('E');
+ // Saved-site pages have a dedicated dashboard; the compact popup has no site-list navigation.
+ const summaryTab=await context.newPage();await summaryTab.goto(`chrome-extension://${id}/dashboard.html`);await expect(summaryTab.locator('main')).toContainText('service.com');
+ const recentTab=await context.newPage();await recentTab.goto(`chrome-extension://${id}/dashboard.html#site=https%3A%2F%2Fservice.com`);await expect(recentTab.locator('main')).toContainText('service.com');
  const savedOrigin='https://service.com';
  const detached=await reopened.evaluate(async siteOrigin=>chrome.runtime.sendMessage({type:'redflag/recheck-site',siteOrigin}),savedOrigin);assert.equal(detached.ok,true);
  await expect.poll(async()=>reopened.evaluate(async()=>{const sites=(await chrome.storage.local.get('redflag.history.v1'))['redflag.history.v1'].sites;return sites.find(s=>s.origin==='https://service.com')?.documents.every(d=>d.status!=='pending');})).toBe(true);

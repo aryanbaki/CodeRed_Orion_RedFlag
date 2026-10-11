@@ -48,15 +48,16 @@ try {
   await helperPage.evaluate(s=>testHistory.recordReview(s),update);
   await expect(dashboard.getByText('Grade: Unrated',{exact:true})).toHaveCount(2);
   await expect(dashboard.locator('.policy-evidence').first()).toHaveAttribute('open','');
-  // Shared local settings synchronize both ways with the actual popup.
-  const popup=await context.newPage();await popup.goto(base+'/popup.html');await popup.locator('#settings-link').click();
+  // Dashboard settings and popup setup share the same canonical preferences.
   await dashboard.getByRole('link',{name:'Settings',exact:true}).click();
   await expect(dashboard.getByRole('button',{name:'Review setup',exact:true})).toBeVisible();
   await expect(dashboard.locator('input[type=checkbox]')).toHaveCount(1);
+  const setupOpened=context.waitForEvent('page');await dashboard.getByRole('button',{name:'Review setup',exact:true}).click();const popup=await setupOpened;await popup.waitForLoadState();assert.equal(new URL(popup.url()).hash,'#onboarding');await expect(popup.locator('#onboarding')).toBeVisible();
   await dashboard.getByRole('checkbox',{name:'Enable RedFlag',exact:false}).uncheck();
-  await expect(popup.getByRole('checkbox',{name:'Automatic checks',exact:false})).not.toBeChecked();
-  await popup.getByRole('checkbox',{name:'Automatic checks',exact:false}).check();
+  await expect.poll(()=>popup.evaluate(async()=> (await chrome.storage.local.get('redflag.preferences.v1'))['redflag.preferences.v1'].enabled)).toBe(false);
+  if(await popup.locator('#onboarding-next').isVisible())await popup.locator('#onboarding-next').click();await popup.locator('#community-only').click();await expect(popup.locator('#onboarding')).toBeHidden();
   await expect(dashboard.getByRole('checkbox',{name:'Enable RedFlag',exact:false})).toBeChecked();
+  await expect(dashboard.getByText('Community ratings only',{exact:true})).toBeVisible();
   await dashboard.screenshot({path:'dist/screenshots/my-sites-settings.png',fullPage:true});
   await dashboard.setViewportSize({width:720,height:900});await dashboard.screenshot({path:'dist/screenshots/my-sites-settings-720.png',fullPage:true});
   assert.equal(await dashboard.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);

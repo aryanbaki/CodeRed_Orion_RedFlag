@@ -1,6 +1,6 @@
 # Popup redesign verification — 2026-10-11
 
-Branch `codex/popup-redesign`, separate managed worktree, based on local main `d306957`. Implementation commit `6c08929`; subsequent integration/verification commit recorded in the handoff. No merge to main.
+Branch `codex/popup-redesign`, separate managed worktree, based on local main `d306957`. Implementation commit `6c08929`; owned verification commit `9a806fb`, followed by worker integration commits recorded below. No merge to main.
 
 ## Implemented presentation
 
@@ -10,7 +10,7 @@ Consent/site permissions, local-only source preview and explicitly fictional dem
 
 ## Checks
 
-- `npm run check`: strict TypeScript, 29 tests, extension build.
+- `npm run check`: strict TypeScript, 30 tests, extension build.
 - `npm run test:browser`: actual unpacked extension, demo separation, priorities/persistence, affirmative consent/revocation and failed saves, restricted page, stale/wrong-page messages.
 - `npm run test:ui`: proactive component regression with fixtures, independent grades/coverage, dates, quotations, safe text rendering, focus/dismissal.
 - `npm run test:discovery-browser`: actual unpacked worker/content regression; retrieval and AI responses simulated.
@@ -27,7 +27,7 @@ Other captures in `screenshots/`: discovering, analyzing, rated, unrated, permis
 
 ## Integration
 
-Owned files: `src/extension/popup.{html,css,ts}`, `src/ui/popup-review.ts`, shared `src/ui/{theme,styles}.ts`, failure-message presentation in `src/ui/review.ts`, popup/browser test updates and this design record. Existing worker code was integrated via their commits; no background analysis/server/history implementation was authored here. Shared contract/API `c96d1fe`, actions `c0ad2e6`, history `e057165`/`02fcffc`, dashboard/build `14d6eef` are dependencies. Keep worker followups when integrating; do not duplicate the earlier backend setup or copy private `.env` files.
+Owned files: `src/extension/popup.{html,css,ts}`, `src/ui/popup-review.ts`, shared `src/ui/{theme,styles}.ts`, failure-message presentation in `src/ui/review.ts`, popup/browser test updates and this design record. Existing worker code was integrated via their commits; no background analysis/server/history implementation was authored here. Shared contract/API `c96d1fe`, actions `c0ad2e6`, history `e057165`/`02fcffc`, dashboard/build `14d6eef` are dependencies. Followups integrated: dashboard/history `8ad2a2e` and `fd7538a`, worker `0075474` (local `95f0385`). After those behavior changes, TypeScript and targeted action/dashboard suites pass. Keep worker followups when integrating; do not duplicate the earlier backend setup or copy private `.env` files.
 
 Popup sends trusted `requestAnalysis({type:'redflag/analyze',mode:'one'|'all'|'recheck',pageKey,documentId?})`. Acknowledgment means queued/admitted, not successful grading; subsequent matching `redflag/state` updates paint results. Recently checked uses `listHistory`/`subscribeHistory` and `mountRecentItems`; routes are `dashboard.html#site=<encoded origin>`. No general browsing history is added by popup.
 
